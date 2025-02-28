@@ -1,0 +1,8 @@
+requests
+streamlit
+numpy
+plotly
+datetime
+itertools
+pandas
+math
