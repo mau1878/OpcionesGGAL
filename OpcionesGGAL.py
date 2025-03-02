@@ -144,13 +144,11 @@ def get_strategy_price(option: dict, action: str, current_stock_price: float | N
     else:
         price = option["c"]
 
-    # More lenient validation - only return None if price is None, not if it's 0
     if price is None:
         if st.session_state.get('debug_mode', False):
             st.write(f"Invalid price for {option['symbol']}: {price} (action: {action}, market_open: {market_open})")
         return None
 
-    # Allow zero prices but log them
     if price <= 0 and st.session_state.get('debug_mode', False):
         st.write(f"Warning: Zero or negative price for {option['symbol']}: {price}")
 
@@ -174,7 +172,6 @@ def calculate_bull_spread(long_call: dict, short_call: dict, current_price: floa
     return net_cost, max_profit, max_loss, [breakeven], prices, profits, "Bull Spread (Calls)", details
 
 def calculate_bear_spread(long_put: dict, short_put: dict, current_price: float, num_contracts: int, debug: bool = False) -> tuple | None:
-    # Ensure long_put strike is higher than short_put strike
     if long_put["strike"] <= short_put["strike"]:
         if debug:
             st.write(f"Invalid bear spread: long put strike ({long_put['strike']}) must be > short put strike ({short_put['strike']})")
@@ -191,28 +188,19 @@ def calculate_bear_spread(long_put: dict, short_put: dict, current_price: float,
     if debug:
         st.write(f"Bear Spread - Long Put: {long_price} at strike {long_put['strike']}, Short Put: {short_price} at strike {short_put['strike']}, Net Cost per Share: {net_cost_per_share}")
 
-    # For a put bear spread, max profit is when price <= short_strike
     max_profit = (long_put["strike"] - short_put["strike"] - net_cost_per_share) * num_contracts * 100
     max_loss = net_cost
-
-    # Breakeven is where profit = 0
     breakeven = long_put["strike"] - net_cost_per_share
 
     prices = np.linspace(current_price - 5000, current_price + 5000, 200)
     profits = []
-
     for price in prices:
-        # At expiration, the payoff is:
-        # If price <= short_strike: both options are exercised
-        # If short_strike < price < long_strike: long put is exercised, short put expires worthless
-        # If price >= long_strike: both options expire worthless, profit = -net_cost
         if price <= short_put["strike"]:
             profit = (long_put["strike"] - short_put["strike"] - net_cost_per_share) * num_contracts * 100
         elif price >= long_put["strike"]:
             profit = -net_cost
         else:
             profit = ((long_put["strike"] - price) - net_cost_per_share) * num_contracts * 100
-
         profits.append(profit)
 
     details = f"Compra {num_contracts} Put {long_put['strike']} ARS, Vende {num_contracts} Put {short_put['strike']} ARS"
@@ -346,7 +334,6 @@ def calculate_put_bull_spread(long_put: dict, short_put: dict, current_price: fl
     return net_cost, max_profit, max_loss, [breakeven], prices, profits, "Put Bull Spread", details
 
 def calculate_call_bear_spread(long_call: dict, short_call: dict, current_price: float, num_contracts: int, debug: bool = False) -> tuple | None:
-    # Ensure long_call strike is higher than short_call strike
     if long_call["strike"] <= short_call["strike"]:
         if debug:
             st.write(f"Invalid call bear spread: long strike ({long_call['strike']}) must be > short strike ({short_call['strike']})")
@@ -363,28 +350,19 @@ def calculate_call_bear_spread(long_call: dict, short_call: dict, current_price:
     if debug:
         st.write(f"Call Bear Spread - Long Call: {long_price} at strike {long_call['strike']}, Short Call: {short_price} at strike {short_call['strike']}, Net Cost per Share: {net_cost_per_share}")
 
-    # For a call bear spread, max profit is when price <= short_strike
     max_profit = (long_call["strike"] - short_call["strike"] - net_cost_per_share) * num_contracts * 100
     max_loss = net_cost
-
-    # Breakeven is where profit = 0
     breakeven = short_call["strike"] + (long_call["strike"] - short_call["strike"] - net_cost_per_share)
 
     prices = np.linspace(current_price - 5000, current_price + 5000, 200)
     profits = []
-
     for price in prices:
-        # At expiration, the payoff is:
-        # If price <= short_strike: both options expire worthless, profit = -net_cost
-        # If short_strike < price < long_strike: short call is exercised, long call expires worthless
-        # If price >= long_strike: both options are exercised
         if price <= short_call["strike"]:
             profit = -net_cost
         elif price >= long_call["strike"]:
             profit = (long_call["strike"] - short_call["strike"] - net_cost_per_share) * num_contracts * 100
         else:
             profit = ((short_call["strike"] - price) - net_cost_per_share) * num_contracts * 100
-
         profits.append(profit)
 
     details = f"Compra {num_contracts} Call {long_call['strike']} ARS, Vende {num_contracts} Call {short_call['strike']} ARS"
@@ -449,11 +427,11 @@ def calculate_collar(stock_price: float, long_put: dict, short_call: dict, num_c
 def count_combinations(iterable: list, r: int) -> int:
     return comb(len(iterable), r) if len(iterable) >= r else 0
 
-
 def analyze_all_strategies(calls: list, puts: list, current_price: float, lower_percentage: float, upper_percentage: float,
-                           max_loss_to_profit_ratio: float = 0.3, min_credit_to_loss_ratio: float = 0.7,
-                           exclude_loss_to_profit: bool = True, exclude_credit_to_loss: bool = True,
-                           included_strategies: set | None = None, exclude_bullish: bool = False, exclude_bearish: bool = False, debug: bool = False) -> list:
+                          max_loss_to_profit_ratio: float = 0.3, min_credit_to_loss_ratio: float = 0.7,
+                          exclude_loss_to_profit: bool = True, exclude_credit_to_loss: bool = True,
+                          included_strategies: set | None = None, exclude_bullish: bool = False,
+                          exclude_bearish: bool = False, exclude_neutral: bool = False, debug: bool = False) -> list:
     if included_strategies is None:
         included_strategies = {
             "Bull Spread (Calls)", "Bear Spread (Puts)", "Mariposa (Calls)", "Cóndor (Calls)",
@@ -461,9 +439,12 @@ def analyze_all_strategies(calls: list, puts: list, current_price: float, lower_
             "Covered Call", "Protective Put", "Collar"
         }
 
-    # Track strategies by category
+    # Define strategy categories
     bullish_strategies = {"Bull Spread (Calls)", "Put Bull Spread", "Straddle", "Strangle", "Covered Call", "Protective Put"}
     bearish_strategies = {"Bear Spread (Puts)", "Call Bear Spread"}
+    neutral_strategies = {"Mariposa (Calls)", "Mariposa (Puts)", "Cóndor (Calls)", "Iron Condor"}
+    # Optionally include Straddle and Strangle as neutral if desired:
+    # neutral_strategies = {"Mariposa (Calls)", "Mariposa (Puts)", "Cóndor (Calls)", "Iron Condor", "Straddle", "Strangle"}
 
     # Apply filters based on user selections
     filtered_strategies = included_strategies.copy()
@@ -471,6 +452,8 @@ def analyze_all_strategies(calls: list, puts: list, current_price: float, lower_
         filtered_strategies -= bullish_strategies
     if exclude_bearish:
         filtered_strategies -= bearish_strategies
+    if exclude_neutral:
+        filtered_strategies -= neutral_strategies
 
     # Initialize results and tracking variables
     results = []
@@ -512,10 +495,9 @@ def analyze_all_strategies(calls: list, puts: list, current_price: float, lower_
 
     task_count = 0
 
-    # Define strategy configurations with corrected combinations for bear spreads
+    # Define strategy configurations
     strategy_configs = [
         ("Bull Spread (Calls)", calculate_bull_spread, combinations(filtered_calls, 2), lambda lc, sc: lc["strike"] < sc["strike"]),
-        # For Bear Spread (Puts), we need to reverse the order of the combinations
         ("Bear Spread (Puts)", calculate_bear_spread, [(p2, p1) for p1, p2 in combinations(filtered_puts, 2) if p1["strike"] < p2["strike"]], lambda lp, sp: lp["strike"] > sp["strike"]),
         ("Mariposa (Calls)", calculate_butterfly_spread, combinations(filtered_calls, 3), lambda lc, mc, hc: lc["strike"] < mc["strike"] < hc["strike"] and (mc["strike"] - lc["strike"]) == (hc["strike"] - mc["strike"])),
         ("Cóndor (Calls)", calculate_condor_spread, combinations(filtered_calls, 4), lambda lc, mlc, mhc, hc: lc["strike"] < mlc["strike"] < mhc["strike"] < hc["strike"] and mlc["strike"] - lc["strike"] == hc["strike"] - mhc["strike"]),
@@ -524,7 +506,6 @@ def analyze_all_strategies(calls: list, puts: list, current_price: float, lower_
         ("Mariposa (Puts)", calculate_put_butterfly, combinations(filtered_puts, 3), lambda lp, mp, hp: lp["strike"] < mp["strike"] < hp["strike"] and (mp["strike"] - lp["strike"]) == (hp["strike"] - mp["strike"])),
         ("Iron Condor", calculate_iron_condor, [(cs, cl, ps, pl) for cs, cl in combinations(filtered_calls, 2) for ps, pl in combinations(filtered_puts, 2) if cs["strike"] < cl["strike"] and ps["strike"] > pl["strike"] and pl["strike"] < cs["strike"]], lambda cs, cl, ps, pl: True),
         ("Put Bull Spread", calculate_put_bull_spread, combinations(filtered_puts, 2), lambda lp, sp: lp["strike"] < sp["strike"]),
-        # For Call Bear Spread, we need to reverse the order of the combinations
         ("Call Bear Spread", calculate_call_bear_spread, [(c2, c1) for c1, c2 in combinations(filtered_calls, 2) if c1["strike"] < c2["strike"]], lambda lc, sc: lc["strike"] > sc["strike"]),
         ("Covered Call", calculate_covered_call, [(current_price, c) for c in filtered_calls], lambda sp, sc: True),
         ("Protective Put", calculate_protective_put, [(current_price, p) for p in filtered_puts], lambda sp, lp: True),
@@ -542,20 +523,7 @@ def analyze_all_strategies(calls: list, puts: list, current_price: float, lower_
         if debug:
             st.write(f"{strategy}: {len(combo_list)} combinations found")
 
-            # Special debugging for bear spreads only when debug mode is on
-            if strategy in ["Bear Spread (Puts)", "Call Bear Spread"]:
-                st.write(f"Processing {strategy} with {len(combo_list)} combinations")
-                if len(combo_list) > 0:
-                    sample_combo = combo_list[0]
-                    st.write(f"Sample combo: {[c['strike'] for c in sample_combo]}")
-                    try:
-                        st.write(f"Condition check: {condition(*sample_combo)}")
-                    except Exception as e:
-                        st.write(f"Error checking condition: {e}")
-
-        # Process each combination for this strategy
         for combo in combo_list:
-            # Check if the combination meets the condition
             try:
                 if not condition(*combo):
                     exclusion_counts[strategy]["condition_failed"] += max_contracts
@@ -570,21 +538,15 @@ def analyze_all_strategies(calls: list, puts: list, current_price: float, lower_
                 progress.progress(min(1.0, task_count / total_tasks if total_tasks > 0 else 1.0))
                 continue
 
-            # Try different contract quantities
             for num_contracts in range(1, max_contracts + 1):
                 try:
-                    # Prepare arguments based on strategy type
                     if strategy == "Covered Call":
-                        # (stock_price, short_call, num_contracts, debug)
                         result = func(combo[0], combo[1], num_contracts, debug)
                     elif strategy == "Protective Put":
-                        # (stock_price, long_put, num_contracts, debug)
                         result = func(combo[0], combo[1], num_contracts, debug)
                     elif strategy == "Collar":
-                        # (stock_price, long_put, short_call, num_contracts, debug)
                         result = func(combo[0], combo[1], combo[2], num_contracts, debug)
                     else:
-                        # Standard option strategies
                         args = list(combo)
                         args.append(current_price)
                         args.append(num_contracts)
@@ -598,7 +560,6 @@ def analyze_all_strategies(calls: list, puts: list, current_price: float, lower_
                     progress.progress(min(1.0, task_count / total_tasks if total_tasks > 0 else 1.0))
                     continue
 
-                # Handle failed strategy calculations
                 if result is None:
                     exclusion_counts[strategy]["price_invalid"] += 1
                     if debug:
@@ -607,26 +568,16 @@ def analyze_all_strategies(calls: list, puts: list, current_price: float, lower_
                     progress.progress(min(1.0, task_count / total_tasks if total_tasks > 0 else 1.0))
                     continue
 
-                # Unpack the strategy results
                 net_cost, max_profit, max_loss, breakevens, prices, profits, strat_name, details = result
 
-                # Special debugging for bear spreads only when debug mode is on
-                if debug and strategy in ["Bear Spread (Puts)", "Call Bear Spread"]:
-                    st.write(f"Strategy calculation successful: {strat_name}")
-                    st.write(f"Net cost: {net_cost}, Max profit: {max_profit}, Max loss: {max_loss}")
-
-                # Process valid strategies
                 if net_cost > 0 or strategy in ["Covered Call", "Protective Put", "Collar"]:
-                    # Calculate ratios for filtering
                     loss_to_profit_ratio = max_loss / max_profit if max_profit > 0 and max_profit != float('inf') else float('inf')
                     credit_received = -net_cost if net_cost < 0 else 0
                     credit_to_loss_ratio = credit_received / max_loss if max_loss > 0 else float('inf')
 
-                    # Check if strategy meets filtering criteria
                     meets_loss_criteria = loss_to_profit_ratio <= max_loss_to_profit_ratio or max_profit == float('inf')
                     meets_credit_criteria = credit_to_loss_ratio >= min_credit_to_loss_ratio or net_cost >= 0
 
-                    # Add warning if criteria not met
                     warning = None
                     if not meets_loss_criteria:
                         warning = "Pérdida/Ganancia excede el límite"
@@ -635,11 +586,8 @@ def analyze_all_strategies(calls: list, puts: list, current_price: float, lower_
                         warning = "Crédito/Pérdida menor al límite"
                         exclusion_counts[strategy]["credit_ratio"] += 1
 
-                    # Add to results if it passes all filters
                     if (not exclude_loss_to_profit or meets_loss_criteria) and (not exclude_credit_to_loss or meets_credit_criteria):
                         profit_potential = max_profit / abs(net_cost) if net_cost != 0 and max_profit != float('inf') else 0
-
-                        # Create result entry
                         results.append({
                             "strategy": strat_name,
                             "strikes": [c["strike"] for c in combo[1:] if isinstance(c, dict)] if strategy in ["Covered Call", "Protective Put"] else [c["strike"] for c in combo if isinstance(c, dict)],
@@ -658,14 +606,11 @@ def analyze_all_strategies(calls: list, puts: list, current_price: float, lower_
                         if debug:
                             st.write(f"Added {strat_name} with strikes {results[-1]['strikes']}, contracts: {num_contracts}, profit_potential: {results[-1]['profit_potential']:.2f}")
 
-                # Update progress
                 task_count += 1
                 progress.progress(min(1.0, task_count / total_tasks if total_tasks > 0 else 1.0))
 
-    # Clear progress bar
     progress.empty()
 
-    # Show exclusion statistics in debug mode
     if debug:
         st.write("### Strategy Exclusion Statistics")
         exclusion_df = pd.DataFrame({
@@ -679,7 +624,6 @@ def analyze_all_strategies(calls: list, puts: list, current_price: float, lower_
         })
         st.dataframe(exclusion_df)
 
-    # Return top 10 strategies sorted by profit potential
     return sorted(results, key=lambda x: x["profit_potential"], reverse=True)[:10]
 
 def plot_strategy(prices: list, profits: list, current_price: float, breakevens: list, strategy_name: str, expiration: date, num_contracts: int) -> go.Figure:
@@ -746,15 +690,12 @@ def create_spread_matrix(calls: list, puts: list, current_price: float, strategy
             pd.DataFrame(cost_matrix, columns=strike_labels, index=strike_labels),
             pd.DataFrame(ratio_matrix, columns=strike_labels, index=strike_labels))
 
-
 def main():
     st.title("Visualizador de Estrategias de Opciones GGAL")
 
-    # Initialize debug_mode in session_state only if it doesn't exist
     if 'debug_mode' not in st.session_state:
         st.session_state.debug_mode = False
 
-    # Use the checkbox to toggle debug_mode, tied to session_state via key
     debug_mode = st.checkbox("Modo Depuración", value=st.session_state.debug_mode, key="debug_mode")
 
     risk_free_rate = st.number_input("Tasa Libre de Riesgo Anualizada (%)", min_value=0.0, max_value=100.0, value=25.0,
@@ -949,10 +890,10 @@ def main():
         exclude_credit_to_loss = st.checkbox("Excluir estrategias por debajo de la razón Crédito/Pérdida", value=False)
         exclude_bullish = st.checkbox("Excluir Estrategias Alcistas", value=False)
         exclude_bearish = st.checkbox("Excluir Estrategias Bajistas", value=False)
+        exclude_neutral = st.checkbox("Excluir Estrategias Neutrales", value=False)
         all_strategies = ["Bull Spread (Calls)", "Bear Spread (Puts)", "Mariposa (Calls)", "Cóndor (Calls)",
                           "Straddle", "Strangle", "Mariposa (Puts)", "Iron Condor", "Put Bull Spread",
-                          "Call Bear Spread",
-                          "Covered Call", "Protective Put", "Collar"]
+                          "Call Bear Spread", "Covered Call", "Protective Put", "Collar"]
         excluded_strategies = st.multiselect("Excluir Estrategias del Análisis", all_strategies,
                                              default=["Collar", "Covered Call", "Protective Put"])
         included_strategies = set(all_strategies) - set(excluded_strategies)
@@ -960,10 +901,10 @@ def main():
         strikes_by_expiration[selected_exp_auto]["puts"]
         with st.spinner("Analizando estrategias..."):
             top_strategies = analyze_all_strategies(calls_auto, puts_auto, current_price, lower_percentage,
-                                                    upper_percentage,
-                                                    max_loss_to_profit, min_credit_to_loss, exclude_loss_to_profit,
-                                                    exclude_credit_to_loss,
-                                                    included_strategies, exclude_bullish, exclude_bearish, debug_mode)
+                                                    upper_percentage, max_loss_to_profit, min_credit_to_loss,
+                                                    exclude_loss_to_profit, exclude_credit_to_loss,
+                                                    included_strategies, exclude_bullish, exclude_bearish,
+                                                    exclude_neutral, debug_mode)
         if not top_strategies:
             st.warning("No se encontraron estrategias válidas con los criterios seleccionados.")
         else:
@@ -997,35 +938,6 @@ def main():
                 selected = [top_strategies[int(s.split(":")[0][1:]) - 1] for s in compare_strategies]
                 fig = plot_comparison(selected, current_price, selected_exp_auto)
                 st.plotly_chart(fig)
-            # Add this in the tab2 section of your main function
-            if debug_mode:
-                st.subheader("Bear Spread Debug")
-                bear_calls = [c for c in calls_auto if min_strike <= c["strike"] <= max_strike]
-                bear_puts = [p for p in puts_auto if min_strike <= p["strike"] <= max_strike]
-
-                st.write("### Call Bear Spread Combinations")
-                call_bear_combos = [(lc, sc) for lc, sc in combinations(bear_calls, 2) if lc["strike"] > sc["strike"]]
-                st.write(f"Found {len(call_bear_combos)} valid call bear spread combinations")
-                if call_bear_combos:
-                    sample = call_bear_combos[0]
-                    st.write(f"Sample: Long Call @ {sample[0]['strike']}, Short Call @ {sample[1]['strike']}")
-                    result = calculate_call_bear_spread(sample[0], sample[1], current_price, 1, True)
-                    if result:
-                        st.write("Sample calculation successful")
-                    else:
-                        st.write("Sample calculation failed")
-
-                st.write("### Put Bear Spread Combinations")
-                put_bear_combos = [(lp, sp) for lp, sp in combinations(bear_puts, 2) if lp["strike"] > sp["strike"]]
-                st.write(f"Found {len(put_bear_combos)} valid put bear spread combinations")
-                if put_bear_combos:
-                    sample = put_bear_combos[0]
-                    st.write(f"Sample: Long Put @ {sample[0]['strike']}, Short Put @ {sample[1]['strike']}")
-                    result = calculate_bear_spread(sample[0], sample[1], current_price, 1, True)
-                    if result:
-                        st.write("Sample calculation successful")
-                    else:
-                        st.write("Sample calculation failed")
 
     with tab3:
         st.subheader("Matrices de Ganancia/Pérdida para Spreads")
