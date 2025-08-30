@@ -6,7 +6,7 @@ from datetime import datetime, date, timedelta, timezone
 from itertools import combinations
 from math import gcd
 from functools import reduce
-import plotly.graph_objects as go  # For 3D visualization
+import plotly.graph_objects as go
 
 # API Endpoints
 STOCK_URL = "https://data912.com/live/arg_stocks"
@@ -49,7 +49,11 @@ def parse_option_symbol(symbol: str) -> tuple[str | None, float | None, date | N
     numeric_part = "".join(filter(str.isdigit, symbol[4:]))
     if not numeric_part:
         return None, None, None
-    strike_price = float(numeric_part) if numeric_part.startswith("1") else float(numeric_part) / 10
+    # Parse as float directly, no division (handles 4200, 4500, 3878.5, etc.)
+    try:
+        strike_price = float(numeric_part[:4] + "." + numeric_part[4:]) if len(numeric_part) > 4 else float(numeric_part)
+    except ValueError:
+        return None, None, None
     suffix = symbol[4 + len(numeric_part):]
     expiration = EXPIRATION_MAP_2025.get(suffix, None)
     return option_type, strike_price, expiration
@@ -101,7 +105,7 @@ def calculate_bull_call_spread(long_opt, short_opt, num_contracts, commission_ra
     max_profit = (short_opt["strike"] - long_opt["strike"]) * num_contracts * 100 - net_cost
     max_loss = net_cost
     breakeven = long_opt["strike"] + (net_cost / (num_contracts * 100))
-    return {"max_profit": max(0, max_profit), "net_cost": net_cost, "max_loss": max_loss, "breakeven": breakeven} if max_profit > 0 else None
+    return {"max_profit": max(0, max_profit), "net_cost": net_cost, "max_loss": max_loss, "breakeven": breakeven, "long_strike": long_opt["strike"], "short_strike": short_opt["strike"]} if max_profit > 0 else None
 
 def calculate_bull_put_spread(long_opt, short_opt, num_contracts, commission_rate):
     if long_opt["strike"] >= short_opt["strike"]:
@@ -118,7 +122,7 @@ def calculate_bull_put_spread(long_opt, short_opt, num_contracts, commission_rat
     max_profit = -net_cost
     max_loss = (short_opt["strike"] - long_opt["strike"]) * num_contracts * 100 + net_cost
     breakeven = short_opt["strike"] + (net_cost / (num_contracts * 100))
-    return {"max_profit": max_profit, "net_cost": net_cost, "max_loss": max_loss, "breakeven": breakeven}
+    return {"max_profit": max_profit, "net_cost": net_cost, "max_loss": max_loss, "breakeven": breakeven, "long_strike": long_opt["strike"], "short_strike": short_opt["strike"]}
 
 def calculate_bear_call_spread(long_opt, short_opt, num_contracts, commission_rate):
     if long_opt["strike"] <= short_opt["strike"]:
@@ -135,7 +139,7 @@ def calculate_bear_call_spread(long_opt, short_opt, num_contracts, commission_ra
     max_profit = -net_cost
     max_loss = (long_opt["strike"] - short_opt["strike"]) * num_contracts * 100 + net_cost
     breakeven = short_opt["strike"] + (-net_cost / (num_contracts * 100))
-    return {"max_profit": max_profit, "net_cost": net_cost, "max_loss": max(0, max_loss), "breakeven": breakeven} if max_profit > 0 and max_loss > 0 else None
+    return {"max_profit": max_profit, "net_cost": net_cost, "max_loss": max(0, max_loss), "breakeven": breakeven, "long_strike": long_opt["strike"], "short_strike": short_opt["strike"]} if max_profit > 0 and max_loss > 0 else None
 
 def calculate_bear_put_spread(long_opt, short_opt, num_contracts, commission_rate):
     if long_opt["strike"] <= short_opt["strike"]:
@@ -152,7 +156,7 @@ def calculate_bear_put_spread(long_opt, short_opt, num_contracts, commission_rat
     max_profit = (long_opt["strike"] - short_opt["strike"]) * num_contracts * 100 - net_cost
     max_loss = net_cost
     breakeven = long_opt["strike"] - (net_cost / (num_contracts * 100))
-    return {"max_profit": max(0, max_profit), "net_cost": net_cost, "max_loss": max_loss, "breakeven": breakeven}
+    return {"max_profit": max(0, max_profit), "net_cost": net_cost, "max_loss": max_loss, "breakeven": breakeven, "long_strike": long_opt["strike"], "short_strike": short_opt["strike"]}
 
 def calculate_call_butterfly(low_opt, mid_opt, high_opt, num_contracts, commission_rate):
     if not (low_opt["strike"] < mid_opt["strike"] < high_opt["strike"]):
@@ -165,7 +169,7 @@ def calculate_call_butterfly(low_opt, mid_opt, high_opt, num_contracts, commissi
 
     gap1 = mid_opt["strike"] - low_opt["strike"]
     gap2 = high_opt["strike"] - mid_opt["strike"]
-    g = gcd(int(gap1), int(gap2))
+    g = gcd(int(gap1 * 10), int(gap2 * 10)) // 10  # Handle decimal strikes
     gap1_units = int(gap1 / g)
     gap2_units = int(gap2 / g)
 
@@ -192,7 +196,8 @@ def calculate_call_butterfly(low_opt, mid_opt, high_opt, num_contracts, commissi
         "net_cost": net_cost,
         "max_loss": max_loss,
         "contracts": f"{low_contracts} : {mid_contracts} : {high_contracts}",
-        "min_contracts": min_contracts
+        "min_contracts": min_contracts,
+        "strikes": [low_opt["strike"], mid_opt["strike"], high_opt["strike"]]
     }
     return result if max_profit > 0 else None
 
@@ -207,7 +212,7 @@ def calculate_put_butterfly(low_opt, mid_opt, high_opt, num_contracts, commissio
 
     gap1 = mid_opt["strike"] - low_opt["strike"]
     gap2 = high_opt["strike"] - mid_opt["strike"]
-    g = gcd(int(gap1), int(gap2))
+    g = gcd(int(gap1 * 10), int(gap2 * 10)) // 10
     gap1_units = int(gap1 / g)
     gap2_units = int(gap2 / g)
 
@@ -234,12 +239,13 @@ def calculate_put_butterfly(low_opt, mid_opt, high_opt, num_contracts, commissio
         "net_cost": net_cost,
         "max_loss": max_loss,
         "contracts": f"{low_contracts} : {mid_contracts} : {high_contracts}",
-        "min_contracts": min_contracts
+        "min_contracts": min_contracts,
+        "strikes": [low_opt["strike"], mid_opt["strike"], high_opt["strike"]]
     }
     return result if max_profit > 0 else None
 
 def lcm(a, b):
-    return abs(a * b) // gcd(int(a), int(b)) if a and b else 0
+    return abs(a * b) // gcd(int(a * 10), int(b * 10)) // 10 if a and b else 0
 
 def calculate_call_condor(low_opt, mid_low_opt, mid_high_opt, high_opt, num_contracts, commission_rate):
     if not (low_opt["strike"] < mid_low_opt["strike"] < mid_high_opt["strike"] < high_opt["strike"]):
@@ -274,7 +280,8 @@ def calculate_call_condor(low_opt, mid_low_opt, mid_high_opt, high_opt, num_cont
         "net_cost": net_cost,
         "max_loss": max_loss,
         "contracts": f"{low_contracts} : {mid_low_contracts} : {mid_high_contracts} : {high_contracts}",
-        "min_contracts": min_contracts
+        "min_contracts": min_contracts,
+        "strikes": [low_opt["strike"], mid_low_opt["strike"], mid_high_opt["strike"], high_opt["strike"]]
     }
     return result if max_profit > 0 else None
 
@@ -311,7 +318,8 @@ def calculate_put_condor(low_opt, mid_low_opt, mid_high_opt, high_opt, num_contr
         "net_cost": net_cost,
         "max_loss": max_loss,
         "contracts": f"{low_contracts} : {mid_low_contracts} : {mid_high_contracts} : {high_contracts}",
-        "min_contracts": min_contracts
+        "min_contracts": min_contracts,
+        "strikes": [low_opt["strike"], mid_low_opt["strike"], mid_high_opt["strike"], high_opt["strike"]]
     }
     return result if max_profit > 0 else None
 
@@ -335,7 +343,8 @@ def calculate_straddle(call_opt, put_opt, num_contracts, commission_rate):
         "net_cost": net_cost,
         "max_loss": max_loss,
         "breakeven_upper": breakeven_upper,
-        "breakeven_lower": breakeven_lower
+        "breakeven_lower": breakeven_lower,
+        "strikes": [strike]
     }
 
 def calculate_strangle(call_opt, put_opt, num_contracts, commission_rate):
@@ -357,7 +366,8 @@ def calculate_strangle(call_opt, put_opt, num_contracts, commission_rate):
         "net_cost": net_cost,
         "max_loss": max_loss,
         "breakeven_upper": breakeven_upper,
-        "breakeven_lower": breakeven_lower
+        "breakeven_lower": breakeven_lower,
+        "strikes": [put_opt["strike"], call_opt["strike"]]
     }
 
 def create_spread_matrix(options: list, strategy_func, num_contracts: int, commission_rate: float, is_bullish: bool):
@@ -394,7 +404,7 @@ def create_spread_matrix(options: list, strategy_func, num_contracts: int, commi
         cost_matrix.append(cost_row)
         ratio_matrix.append(ratio_row)
         breakeven_matrix.append(breakeven_row)
-    strike_labels = [f"{s['strike']:.1f}" for s in strikes]
+    strike_labels = [f"{s['strike']:.2f}" for s in strikes]
     return (
         pd.DataFrame(profit_matrix, columns=strike_labels, index=strike_labels),
         pd.DataFrame(cost_matrix, columns=strike_labels, index=strike_labels),
@@ -412,12 +422,13 @@ def create_complex_strategy_table(options: list, strategy_func, num_contracts: i
             if result and result["max_profit"] > 0:
                 ratio = result["net_cost"] / result["max_profit"]
                 entry = {
-                    "Strikes": " - ".join(f"{opt['strike']:.1f}" for opt in combo),
+                    "Strikes": " - ".join(f"{opt['strike']:.2f}" for opt in combo),
                     "Net Cost": result["net_cost"],
                     "Max Profit": result["max_profit"],
                     "Max Loss": result["max_loss"],
                     "Cost-to-Profit Ratio": ratio,
-                    "Contracts": result["contracts"]
+                    "Contracts": result["contracts"],
+                    "strikes": result["strikes"]
                 }
                 data.append(entry)
     return pd.DataFrame(data)
@@ -435,13 +446,14 @@ def create_vol_strategy_table(calls: list, puts: list, strategy_func, num_contra
                 if result:
                     ratio = result["net_cost"] / result["max_loss"]
                     data.append({
-                        "Strikes": f"{strike:.1f} (Call & Put)",
+                        "Strikes": f"{strike:.2f} (Call & Put)",
                         "Net Cost": result["net_cost"],
                         "Max Profit": result["max_profit"],
                         "Max Loss": result["max_loss"],
                         "Breakeven Upper": result["breakeven_upper"],
                         "Breakeven Lower": result["breakeven_lower"],
-                        "Cost-to-Loss Ratio": ratio
+                        "Cost-to-Loss Ratio": ratio,
+                        "strikes": result["strikes"]
                     })
     elif strategy_func == calculate_strangle:
         for call_strike in call_strikes:
@@ -453,40 +465,117 @@ def create_vol_strategy_table(calls: list, puts: list, strategy_func, num_contra
                     if result:
                         ratio = result["net_cost"] / result["max_loss"]
                         data.append({
-                            "Strikes": f"Put {put_strike:.1f} - Call {call_strike:.1f}",
+                            "Strikes": f"Put {put_strike:.2f} - Call {call_strike:.2f}",
                             "Net Cost": result["net_cost"],
                             "Max Profit": result["max_profit"],
                             "Max Loss": result["max_loss"],
                             "Breakeven Upper": result["breakeven_upper"],
                             "Breakeven Lower": result["breakeven_lower"],
-                            "Cost-to-Loss Ratio": ratio
+                            "Cost-to-Loss Ratio": ratio,
+                            "strikes": result["strikes"]
                         })
     return pd.DataFrame(data)
 
 def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFAULT_IV, key=None):
-    if not strategy_result:
-        st.warning("No strategy selected for visualization.")
+    if not strategy_result or "strikes" not in strategy_result:
+        st.warning("No valid strategy selected for visualization.")
         return
-    prices = np.linspace(current_price * 0.5, current_price * 1.5, 50)
+    prices = np.linspace(max(0, current_price * 0.5), current_price * 1.5, 50)
     times = np.linspace(0, expiration_days, 20)
     X, Y = np.meshgrid(prices, times)
     Z = np.zeros_like(X)
+    net_cost = strategy_result.get("net_cost", 0)
+    max_loss = strategy_result.get("max_loss", 0)
+    max_profit_val = strategy_result.get("max_profit", 0)
+    strikes = strategy_result["strikes"]
+    len_strikes = len(strikes)
+    is_unlimited = isinstance(max_profit_val, str) and max_profit_val == "Unlimited"
+    if is_unlimited:
+        max_profit_val = float('inf')
+
     for i in range(len(times)):
         time_factor = (expiration_days - times[i]) / expiration_days if expiration_days > 0 else 1
+        theta_decay = (1 - time_factor) * iv * 0.5  # Simplified theta decay
         for j in range(len(prices)):
-            if "breakeven" in strategy_result:  # Spreads
-                if "max_profit" in strategy_result and strategy_result["max_profit"] > 0:
-                    if prices[j] > strategy_result["breakeven"]:
-                        Z[i, j] = min(strategy_result["max_profit"], (prices[j] - strategy_result["breakeven"]) * 100) * time_factor
+            price = prices[j]
+            if len_strikes == 2 and "breakeven" in strategy_result:  # Spreads
+                long_strike = strategy_result["long_strike"]
+                short_strike = strategy_result["short_strike"]
+                if "bull_call" in key:
+                    if price <= long_strike:
+                        profit = -net_cost
+                    elif price <= short_strike:
+                        profit = (price - long_strike) * 100 * time_factor - net_cost
                     else:
-                        Z[i, j] = -strategy_result["max_loss"] * time_factor
-            elif "breakeven_upper" in strategy_result:  # Straddle/Strangle
-                dist_upper = max(0, prices[j] - strategy_result["breakeven_upper"])
-                dist_lower = max(0, strategy_result["breakeven_lower"] - prices[j])
-                Z[i, j] = (dist_upper + dist_lower) * 100 * time_factor - strategy_result["max_loss"] * (1 - time_factor)
-            Z[i, j] *= (1 + iv * (1 - time_factor))  # Simple IV boost
+                        profit = min(max_profit_val, (short_strike - long_strike) * 100) * time_factor - net_cost
+                elif "bull_put" in key:
+                    if price <= long_strike:
+                        profit = -max_loss * time_factor
+                    elif price <= short_strike:
+                        profit = ((price - long_strike) * 100 + net_cost) * time_factor
+                    else:
+                        profit = max_profit_val * time_factor
+                elif "bear_call" in key:
+                    if price <= short_strike:
+                        profit = max_profit_val * time_factor
+                    elif price <= long_strike:
+                        profit = (max_profit_val - (price - short_strike) * 100) * time_factor
+                    else:
+                        profit = -max_loss * time_factor
+                elif "bear_put" in key:
+                    if price <= short_strike:
+                        profit = max_profit_val * time_factor
+                    elif price <= long_strike:
+                        profit = ((long_strike - price) * 100 - net_cost) * time_factor
+                    else:
+                        profit = -net_cost * time_factor
+                else:
+                    profit = 0
+            elif len_strikes == 1:  # Straddle
+                strike = strikes[0]
+                be_upper = strategy_result["breakeven_upper"]
+                be_lower = strategy_result["breakeven_lower"]
+                if price <= be_lower or price >= be_upper:
+                    profit = (abs(price - strike) * 100 - net_cost) * time_factor
+                else:
+                    profit = -net_cost * time_factor
+            elif len_strikes == 2:  # Strangle
+                put_strike, call_strike = strikes
+                be_upper = strategy_result["breakeven_upper"]
+                be_lower = strategy_result["breakeven_lower"]
+                if price <= be_lower:
+                    profit = (be_lower - price) * 100 * time_factor - net_cost
+                elif price >= be_upper:
+                    profit = (price - be_upper) * 100 * time_factor - net_cost
+                else:
+                    profit = -net_cost * time_factor
+            elif len_strikes == 3:  # Butterfly
+                low, mid, high = strikes
+                width_low = mid - low
+                width_high = high - mid
+                if price <= low or price >= high:
+                    profit = -net_cost * time_factor
+                elif price <= mid:
+                    profit = ((price - low) / width_low * max_profit_val - net_cost) * time_factor
+                else:
+                    profit = ((high - price) / width_high * max_profit_val - net_cost) * time_factor
+            elif len_strikes == 4:  # Condor
+                low, mid_low, mid_high, high = strikes
+                width_low = mid_low - low
+                width_high = high - mid_high
+                if price <= low or price >= high:
+                    profit = -net_cost * time_factor
+                elif price <= mid_low:
+                    profit = ((price - low) / width_low * max_profit_val - net_cost) * time_factor
+                elif price <= mid_high:
+                    profit = (max_profit_val - net_cost) * time_factor
+                else:
+                    profit = ((high - price) / width_high * max_profit_val - net_cost) * time_factor
+            else:
+                profit = 0
+            Z[i, j] = profit * (1 + theta_decay)
     fig = go.Figure(data=[go.Surface(z=Z, x=X, y=Y, colorscale='RdYlGn')])
-    fig.update_layout(title="3D Payoff: Profit/Loss vs. Price vs. Time", scene=dict(xaxis_title='Underlying Price', yaxis_title='Days to Expiration', zaxis_title='Profit/Loss (ARS)'))
+    fig.update_layout(title=f"3D Payoff: {key.split('_')[-1]}", scene=dict(xaxis_title='Underlying Price', yaxis_title='Days to Expiration', zaxis_title='Profit/Loss (ARS)'))
     st.plotly_chart(fig, key=key)
 
 def display_spread_matrix(tab, strategy_name, options, strategy_func, is_bullish):
@@ -545,7 +634,7 @@ def display_complex_strategy(tab, strategy_name, options, strategy_func, combo_s
             selected_row = st.selectbox("Selecciona una combinación para visualizar en 3D", filtered_df.index, key=f"select_{strategy_name}")
             if selected_row is not None:
                 result = filtered_df.iloc[selected_row].to_dict()
-                expiration_days = max(1, (st.session_state.selected_exp - date.today()).days)  # Avoid zero/negative
+                expiration_days = max(1, (st.session_state.selected_exp - date.today()).days)
                 visualize_3d_payoff(result, st.session_state.current_price, expiration_days, st.session_state.iv, key=f"chart_{strategy_name}")
         else:
             st.write("No se encontraron combinaciones válidas.")
