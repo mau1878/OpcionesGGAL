@@ -463,7 +463,7 @@ def create_vol_strategy_table(calls: list, puts: list, strategy_func, num_contra
                         })
     return pd.DataFrame(data)
 
-def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFAULT_IV):
+def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFAULT_IV, key=None):
     if not strategy_result:
         st.warning("No strategy selected for visualization.")
         return
@@ -487,7 +487,7 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
             Z[i, j] *= (1 + iv * (1 - time_factor))  # Simple IV boost
     fig = go.Figure(data=[go.Surface(z=Z, x=X, y=Y, colorscale='RdYlGn')])
     fig.update_layout(title="3D Payoff: Profit/Loss vs. Price vs. Time", scene=dict(xaxis_title='Underlying Price', yaxis_title='Days to Expiration', zaxis_title='Profit/Loss (ARS)'))
-    st.plotly_chart(fig)
+    st.plotly_chart(fig, key=key)
 
 def display_spread_matrix(tab, strategy_name, options, strategy_func, is_bullish):
     with tab:
@@ -542,11 +542,11 @@ def display_complex_strategy(tab, strategy_name, options, strategy_func, combo_s
         if not df.empty:
             filtered_df = df[df["Cost-to-Profit Ratio"] <= filter_ratio]
             st.dataframe(filtered_df.style.format({"Net Cost": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}", "Cost-to-Profit Ratio": "{:.2f}"}))
-            selected_row = st.selectbox("Selecciona una combinación para visualizar en 3D", filtered_df.index)
+            selected_row = st.selectbox("Selecciona una combinación para visualizar en 3D", filtered_df.index, key=f"select_{strategy_name}")
             if selected_row is not None:
                 result = filtered_df.iloc[selected_row].to_dict()
                 expiration_days = max(1, (st.session_state.selected_exp - date.today()).days)  # Avoid zero/negative
-                visualize_3d_payoff(result, st.session_state.current_price, expiration_days, st.session_state.iv)
+                visualize_3d_payoff(result, st.session_state.current_price, expiration_days, st.session_state.iv, key=f"chart_{strategy_name}")
         else:
             st.write("No se encontraron combinaciones válidas.")
 
@@ -564,11 +564,11 @@ def display_vol_strategy(tab, strategy_name, calls, puts, strategy_func):
         if not df.empty:
             filtered_df = df[df["Cost-to-Loss Ratio"] <= filter_ratio]
             st.dataframe(filtered_df.style.format({"Net Cost": "{:.2f}", "Max Loss": "{:.2f}", "Breakeven Upper": "{:.2f}", "Breakeven Lower": "{:.2f}", "Cost-to-Loss Ratio": "{:.2f}"}))
-            selected_row = st.selectbox("Selecciona una combinación para visualizar en 3D", filtered_df.index)
+            selected_row = st.selectbox("Selecciona una combinación para visualizar en 3D", filtered_df.index, key=f"select_vol_{strategy_name}")
             if selected_row is not None:
                 result = filtered_df.iloc[selected_row].to_dict()
                 expiration_days = max(1, (st.session_state.selected_exp - date.today()).days)
-                visualize_3d_payoff(result, st.session_state.current_price, expiration_days, st.session_state.iv)
+                visualize_3d_payoff(result, st.session_state.current_price, expiration_days, st.session_state.iv, key=f"chart_vol_{strategy_name}")
         else:
             st.write("No se encontraron combinaciones válidas.")
 
