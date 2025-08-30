@@ -316,92 +316,94 @@ def calculate_put_butterfly(low_opt, mid_opt, high_opt, num_contracts, commissio
 def lcm(a, b):
     return abs(a * b) / gcd(int(a * 100), int(b * 100)) * 100 if a and b else 0
 
+
 def calculate_call_condor(low_opt, mid_low_opt, mid_high_opt, high_opt, num_contracts, commission_rate):
     if not (low_opt["strike"] < mid_low_opt["strike"] < mid_high_opt["strike"] < high_opt["strike"]):
         return None
-    low_price = get_strategy_price(low_opt, "buy")
-    mid_low_price = get_strategy_price(mid_low_opt, "sell")
-    mid_high_price = get_strategy_price(mid_high_opt, "sell")
-    high_price = get_strategy_price(high_opt, "buy")
-    if any(p is None for p in [low_price, mid_low_price, mid_high_price, high_price]):
-        return None
+    prices = [get_strategy_price(opt, action) for opt, action in
+              zip([low_opt, mid_low_opt, mid_high_opt, high_opt], ["buy", "sell", "sell", "buy"])]
+    if any(p is None for p in prices): return None
 
     gap1 = mid_low_opt["strike"] - low_opt["strike"]
-    gap2 = mid_high_opt["strike"] - mid_low_opt["strike"]
     gap3 = high_opt["strike"] - mid_high_opt["strike"]
-    if any(g < MIN_GAP for g in [gap1, gap2, gap3]):
-        logger.warning(f"Invalid gaps: gap1={gap1}, gap2={gap2}, gap3={gap3}")
-        return None
+    if gap1 < MIN_GAP or gap3 < MIN_GAP: return None
 
-    gaps = [gap1, gap2, gap3]
+    # --- FIX: Calculate contract ratios ---
     scale = 100
-    lcm_gaps = reduce(lcm, gaps) if all(gaps) else 1
-    low_contracts = num_contracts * (lcm_gaps / gap1)
-    mid_low_contracts = -num_contracts * (lcm_gaps / gap1)
-    mid_high_contracts = -num_contracts * (lcm_gaps / gap3)
-    high_contracts = num_contracts * (lcm_gaps / gap3)
-    min_contracts = lcm_gaps / min(gaps) if gaps else 1
+    g = gcd(int(gap1 * scale), int(gap3 * scale)) / scale
+    if g < MIN_GAP: g = MIN_GAP
 
-    base_cost = (low_price * abs(low_contracts) + high_price * abs(high_contracts)) * 100
+    low_units = round(gap3 / g)
+    high_units = round(gap1 / g)
+
+    ratios = [
+        num_contracts * low_units,
+        -num_contracts * low_units,
+        -num_contracts * high_units,
+        num_contracts * high_units
+    ]
+
+    base_cost = (prices[0] * abs(ratios[0]) + prices[3] * abs(ratios[3])) * 100
     commission, market_fees, vat = calculate_fees(base_cost, commission_rate)
-    net_cost = (low_price * low_contracts + mid_low_price * mid_low_contracts + mid_high_price * mid_high_contracts + high_price * high_contracts) * 100 + commission + market_fees + vat
-    if net_cost <= 0:
-        return None
-    max_profit = (mid_high_opt["strike"] - mid_low_opt["strike"]) * abs(mid_low_contracts) * 100 - net_cost
+    net_cost = sum(p * r for p, r in zip(prices, ratios)) * 100 + commission + market_fees + vat
+
+    if net_cost <= 0: return None
+
+    max_profit = (mid_low_opt["strike"] - low_opt["strike"]) * abs(ratios[0]) * 100 - net_cost
     max_loss = net_cost
+
     result = {
-        "max_profit": max(0, max_profit),
-        "net_cost": net_cost,
-        "max_loss": max_loss,
-        "contracts": f"{low_contracts:.2f} : {mid_low_contracts:.2f} : {mid_high_contracts:.2f} : {high_contracts:.2f}",
-        "min_contracts": min_contracts,
-        "strikes": [low_opt["strike"], mid_low_opt["strike"], mid_high_opt["strike"], high_opt["strike"]]
+        "max_profit": max(0, max_profit), "net_cost": net_cost, "max_loss": max_loss,
+        "contracts": f"{ratios[0]:.2f} : {ratios[1]:.2f} : {ratios[2]:.2f} : {ratios[3]:.2f}",
+        "strikes": [low_opt["strike"], mid_low_opt["strike"], mid_high_opt["strike"], high_opt["strike"]],
+        "contract_ratios": ratios
     }
     return result if max_profit > 0 else None
 
+
+# REPLACE this function in utils.py
 def calculate_put_condor(low_opt, mid_low_opt, mid_high_opt, high_opt, num_contracts, commission_rate):
     if not (low_opt["strike"] < mid_low_opt["strike"] < mid_high_opt["strike"] < high_opt["strike"]):
         return None
-    low_price = get_strategy_price(low_opt, "buy")
-    mid_low_price = get_strategy_price(mid_low_opt, "sell")
-    mid_high_price = get_strategy_price(mid_high_opt, "sell")
-    high_price = get_strategy_price(high_opt, "buy")
-    if any(p is None for p in [low_price, mid_low_price, mid_high_price, high_price]):
-        return None
+    prices = [get_strategy_price(opt, action) for opt, action in
+              zip([low_opt, mid_low_opt, mid_high_opt, high_opt], ["buy", "sell", "sell", "buy"])]
+    if any(p is None for p in prices): return None
 
     gap1 = mid_low_opt["strike"] - low_opt["strike"]
-    gap2 = mid_high_opt["strike"] - mid_low_opt["strike"]
     gap3 = high_opt["strike"] - mid_high_opt["strike"]
-    if any(g < MIN_GAP for g in [gap1, gap2, gap3]):
-        logger.warning(f"Invalid gaps: gap1={gap1}, gap2={gap2}, gap3={gap3}")
-        return None
+    if gap1 < MIN_GAP or gap3 < MIN_GAP: return None
 
-    gaps = [gap1, gap2, gap3]
+    # --- FIX: Calculate contract ratios ---
     scale = 100
-    lcm_gaps = reduce(lcm, gaps) if all(gaps) else 1
-    low_contracts = num_contracts * (lcm_gaps / gap1)
-    mid_low_contracts = -num_contracts * (lcm_gaps / gap1)
-    mid_high_contracts = -num_contracts * (lcm_gaps / gap3)
-    high_contracts = num_contracts * (lcm_gaps / gap3)
-    min_contracts = lcm_gaps / min(gaps) if gaps else 1
+    g = gcd(int(gap1 * scale), int(gap3 * scale)) / scale
+    if g < MIN_GAP: g = MIN_GAP
 
-    base_cost = (low_price * abs(low_contracts) + high_price * abs(high_contracts)) * 100
+    low_units = round(gap3 / g)
+    high_units = round(gap1 / g)
+
+    ratios = [
+        num_contracts * low_units,
+        -num_contracts * low_units,
+        -num_contracts * high_units,
+        num_contracts * high_units
+    ]
+
+    base_cost = (prices[0] * abs(ratios[0]) + prices[3] * abs(ratios[3])) * 100
     commission, market_fees, vat = calculate_fees(base_cost, commission_rate)
-    net_cost = (low_price * low_contracts + mid_low_price * mid_low_contracts + mid_high_price * mid_high_contracts + high_price * high_contracts) * 100 + commission + market_fees + vat
-    if net_cost <= 0:
-        return None
-    max_profit = (mid_high_opt["strike"] - mid_low_opt["strike"]) * abs(mid_low_contracts) * 100 - net_cost
+    net_cost = sum(p * r for p, r in zip(prices, ratios)) * 100 + commission + market_fees + vat
+
+    if net_cost <= 0: return None
+
+    max_profit = (mid_low_opt["strike"] - low_opt["strike"]) * abs(ratios[0]) * 100 - net_cost
     max_loss = net_cost
+
     result = {
-        "max_profit": max(0, max_profit),
-        "net_cost": net_cost,
-        "max_loss": max_loss,
-        "contracts": f"{low_contracts:.2f} : {mid_low_contracts:.2f} : {mid_high_contracts:.2f} : {high_contracts:.2f}",
-        "min_contracts": min_contracts,
-        "strikes": [low_opt["strike"], mid_low_opt["strike"], mid_high_opt["strike"], high_opt["strike"]]
+        "max_profit": max(0, max_profit), "net_cost": net_cost, "max_loss": max_loss,
+        "contracts": f"{ratios[0]:.2f} : {ratios[1]:.2f} : {ratios[2]:.2f} : {ratios[3]:.2f}",
+        "strikes": [low_opt["strike"], mid_low_opt["strike"], mid_high_opt["strike"], high_opt["strike"]],
+        "contract_ratios": ratios
     }
     return result if max_profit > 0 else None
-
 def calculate_straddle(call_opt, put_opt, num_contracts, commission_rate):
     if call_opt["strike"] != put_opt["strike"]:
         return None
@@ -508,7 +510,7 @@ def create_complex_strategy_table(options: list, strategy_func, num_contracts: i
                     "Cost-to-Profit Ratio": ratio,
                     "Contracts": result.get("contracts", "N/A"),
                     "strikes": result["strikes"],
-                    # --- FIX: Add contract ratios to the DataFrame row ---
+                    # --- FIX: Add contract ratios to the DataFrame row for ALL complex strategies ---
                     "contract_ratios": result.get("contract_ratios")
                 }
                 data.append(entry)
@@ -592,16 +594,20 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
             T = (expiration_days - Y[i, j]) / 365.0
             position_value = 0.0
 
-            # --- FIX: Use actual contract ratios for visualization ---
             if "butterfly" in strategy_key:
                 ratios = strategy_result.get("contract_ratios", [1, -2, 1])
                 low_k, mid_k, high_k = strikes
                 opt_type = "call" if "call" in strategy_key else "put"
-                val1 = black_scholes(price, low_k, T, r, iv, opt_type)
-                val2 = black_scholes(price, mid_k, T, r, iv, opt_type)
-                val3 = black_scholes(price, high_k, T, r, iv, opt_type)
-                position_value = (ratios[0] * val1 + ratios[1] * val2 + ratios[2] * val3) * 100
-            # ... (rest of the elif statements for other strategies remain the same)
+                vals = [black_scholes(price, k, T, r, iv, opt_type) for k in [low_k, mid_k, high_k]]
+                position_value = (ratios[0] * vals[0] + ratios[1] * vals[1] + ratios[2] * vals[2]) * 100
+            # --- FIX: Add corrected logic for condor visualization ---
+            elif "condor" in strategy_key:
+                ratios = strategy_result.get("contract_ratios", [1, -1, -1, 1])
+                k1, k2, k3, k4 = strikes
+                opt_type = "call" if "call" in strategy_key else "put"
+                vals = [black_scholes(price, k, T, r, iv, opt_type) for k in strikes]
+                position_value = (ratios[0] * vals[0] + ratios[1] * vals[1] + ratios[2] * vals[2] + ratios[3] * vals[
+                    3]) * 100
             elif "bull call spread" in strategy_key or "bear call spread" in strategy_key:
                 k1, k2 = strikes
                 val1 = black_scholes(price, k1, T, r, iv, "call")
@@ -622,15 +628,6 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
                 val_call = black_scholes(price, call_k, T, r, iv, "call")
                 val_put = black_scholes(price, put_k, T, r, iv, "put")
                 position_value = (val_call + val_put) * 100
-            elif "condor" in strategy_key:
-                # Note: Condor ratios are assumed to be 1:-1:-1:1 for visualization
-                k1, k2, k3, k4 = strikes
-                opt_type = "call" if "call" in strategy_key else "put"
-                val1 = black_scholes(price, k1, T, r, iv, opt_type)
-                val2 = black_scholes(price, k2, T, r, iv, opt_type)
-                val3 = black_scholes(price, k3, T, r, iv, opt_type)
-                val4 = black_scholes(price, k4, T, r, iv, opt_type)
-                position_value = (val1 - val2 - val3 + val4) * 100
 
             Z[i, j] = position_value - net_cost
 
