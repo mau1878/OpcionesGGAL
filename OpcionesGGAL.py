@@ -8,6 +8,7 @@ from math import gcd
 from functools import reduce
 import plotly.graph_objects as go
 import logging
+from scipy.stats import norm
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -577,92 +578,97 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
         logger.warning("No strikes in strategy_result")
         return
 
-    prices = np.linspace(max(0, current_price * 0.5), current_price * 1.5, 50)
+    # --- FIX: Use the correct key "Net Cost" from the DataFrame ---
+    net_cost = strategy_result.get("Net Cost", strategy_result.get("net_cost", 0))
+    
+    if net_cost is None:
+        st.error("Could not retrieve net cost for visualization.")
+        return
+
+    # Black-Scholes option pricing model
+    def black_scholes(S, K, T, r, sigma, option_type="call"):
+        if T <= 1e-6: # Handle expiration day
+            return max(0, S - K) if option_type == "call" else max(0, K - S)
+        
+        d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
+        d2 = d1 - sigma * np.sqrt(T)
+        
+        if option_type == "call":
+            return S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
+        else: # put
+            return K * np.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
+
+    prices = np.linspace(max(0.1, current_price * 0.5), current_price * 1.5, 50)
     times = np.linspace(0, expiration_days, 20)
     X, Y = np.meshgrid(prices, times)
     Z = np.zeros_like(X)
 
-    net_cost = strategy_result.get("net_cost", 0)
     strikes = strategy_result["strikes"]
     strategy_key = key.lower() if key else ""
+    r = 0.05  # Assumed risk-free rate
 
-    # Calculate payoff at expiration and project it across the time axis
+    # Calculate P/L for each point in time and price using Black-Scholes
     for i in range(len(times)):
         for j in range(len(prices)):
-            price = prices[j]
-            payoff = 0.0
+            price = X[j, i]
+            time_to_exp_days = expiration_days - Y[j, i]
+            T = time_to_exp_days / 365.0
+            
+            position_value = 0.0
 
-            if "bull call spread" in strategy_key:
-                long_strike, short_strike = strikes
-                payoff = (max(0, price - long_strike) - max(0, price - short_strike)) * 100
-                Z[i, j] = payoff - net_cost
-            elif "bull put spread" in strategy_key:
-                long_strike, short_strike = strikes
-                payoff = (max(0, long_strike - price) - max(0, short_strike - price)) * 100
-                Z[i, j] = payoff - net_cost # net_cost is a credit (negative)
-            elif "bear call spread" in strategy_key:
-                short_strike, long_strike = strikes
-                payoff = (max(0, price - long_strike) - max(0, price - short_strike)) * 100
-                Z[i, j] = payoff - net_cost # net_cost is a credit (negative)
-            elif "bear put spread" in strategy_key:
-                short_strike, long_strike = strikes
-                payoff = (max(0, long_strike - price) - max(0, short_strike - price)) * 100
-                Z[i, j] = payoff - net_cost
+            if "bull call spread" in strategy_key or "bear call spread" in strategy_key:
+                k1, k2 = strikes
+                val1 = black_scholes(price, k1, T, r, iv, "call")
+                val2 = black_scholes(price, k2, T, r, iv, "call")
+                position_value = (val1 - val2) * 100
+            elif "bull put spread" in strategy_key or "bear put spread" in strategy_key:
+                k1, k2 = strikes
+                val1 = black_scholes(price, k1, T, r, iv, "put")
+                val2 = black_scholes(price, k2, T, r, iv, "put")
+                position_value = (val1 - val2) * 100
             elif "straddle" in strategy_key:
-                strike = strikes[0]
-                payoff = (max(0, price - strike) + max(0, strike - price)) * 100
-                Z[i, j] = payoff - net_cost
+                k1 = strikes[0]
+                val_call = black_scholes(price, k1, T, r, iv, "call")
+                val_put = black_scholes(price, k1, T, r, iv, "put")
+                position_value = (val_call + val_put) * 100
             elif "strangle" in strategy_key:
-                put_strike, call_strike = strikes
-                payoff = (max(0, price - call_strike) + max(0, put_strike - price)) * 100
-                Z[i, j] = payoff - net_cost
+                put_k, call_k = strikes
+                val_call = black_scholes(price, call_k, T, r, iv, "call")
+                val_put = black_scholes(price, put_k, T, r, iv, "put")
+                position_value = (val_call + val_put) * 100
             elif "butterfly" in strategy_key:
-                low, mid, high = strikes
-                if "call" in strategy_key:
-                    payoff = (max(0, price - low) - 2 * max(0, price - mid) + max(0, price - high)) * 100
-                else:
-                    payoff = (max(0, low - price) - 2 * max(0, mid - price) + max(0, high - price)) * 100
-                Z[i, j] = payoff - net_cost
+                low_k, mid_k, high_k = strikes
+                opt_type = "call" if "call" in strategy_key else "put"
+                val1 = black_scholes(price, low_k, T, r, iv, opt_type)
+                val2 = black_scholes(price, mid_k, T, r, iv, opt_type)
+                val3 = black_scholes(price, high_k, T, r, iv, opt_type)
+                position_value = (val1 - 2 * val2 + val3) * 100
             elif "condor" in strategy_key:
-                low, mid_low, mid_high, high = strikes
-                if "call" in strategy_key:
-                    payoff = (max(0, price - low) - max(0, price - mid_low) - max(0, price - mid_high) + max(0, price - high)) * 100
-                else:
-                    payoff = (max(0, low - price) - max(0, mid_low - price) - max(0, mid_high - price) + max(0, high - price)) * 100
-                Z[i, j] = payoff - net_cost
+                k1, k2, k3, k4 = strikes
+                opt_type = "call" if "call" in strategy_key else "put"
+                val1 = black_scholes(price, k1, T, r, iv, opt_type)
+                val2 = black_scholes(price, k2, T, r, iv, opt_type)
+                val3 = black_scholes(price, k3, T, r, iv, opt_type)
+                val4 = black_scholes(price, k4, T, r, iv, opt_type)
+                position_value = (val1 - val2 - val3 + val4) * 100
 
-    # --- NEW VISUALIZATION LOGIC ---
-    # 1. Create the main payoff surface
-    payoff_surface = go.Surface(
-        z=Z, x=X, y=Y,
-        colorscale='RdYlGn',
-        cmin=Z.min(), cmax=Z.max(),
-        colorbar=dict(title='Profit/Loss'),
-        name='Payoff Surface'
-    )
+            # For credit spreads, net_cost is negative (a credit received)
+            # For debit spreads, net_cost is positive (a debit paid)
+            # The P/L is always the current value minus the initial cost.
+            Z[j, i] = position_value - net_cost
 
-    # 2. Create a transparent plane at z=0 for breakeven
-    breakeven_plane = go.Surface(
-        z=np.zeros_like(X), x=X, y=Y,
-        opacity=0.7,
-        showscale=False,
-        colorscale=[[0, '#0000FF'], [1, '#0000FF']], # Single color (blue)
-        name='Breakeven Plane'
-    )
+    # Create the main payoff surface
+    payoff_surface = go.Surface(z=Z, x=X, y=Y, colorscale='RdYlGn', cmin=Z.min(), cmax=Z.max(), colorbar=dict(title='Profit/Loss'))
+    
+    # Create a transparent plane at z=0 for breakeven
+    breakeven_plane = go.Surface(z=np.zeros_like(X), x=X, y=Y, opacity=0.7, showscale=False, colorscale=[[0, '#0000FF'], [1, '#0000FF']])
 
     fig = go.Figure(data=[payoff_surface, breakeven_plane])
-    
     fig.update_layout(
-        title=f"Payoff at Expiration: {key.replace('_', ' ').title()}",
-        scene=dict(
-            xaxis_title='Underlying Price (ARS)',
-            yaxis_title='Days to Expiration',
-            zaxis_title='Profit/Loss (ARS)'
-        ),
-        legend=dict(x=0, y=1, traceorder='normal')
+        title=f"Strategy Value Over Time: {key.replace('_', ' ').title()}",
+        scene=dict(xaxis_title='Underlying Price (ARS)', yaxis_title='Days Elapsed', zaxis_title='Profit/Loss (ARS)')
     )
     st.plotly_chart(fig, use_container_width=True, key=f"chart_{key}")
-
 def display_spread_matrix(tab, strategy_name, options, strategy_func, is_bullish):
     with tab:
         st.subheader(f"Matriz de {strategy_name}")
