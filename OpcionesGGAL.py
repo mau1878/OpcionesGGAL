@@ -53,24 +53,46 @@ def parse_option_symbol(symbol: str) -> tuple[str | None, float | None, date | N
         option_type = "put"
     else:
         return None, None, None
+
+    # Isolate the part of the symbol that contains the strike and expiration
+    data_part = symbol[4:]
     
-    # Extract all characters that are not digits to find the expiration suffix
-    non_digit_part = ''.join(filter(lambda x: not x.isdigit(), symbol[4:]))
+    # Find the first letter of the expiration code to separate numbers from letters
+    first_letter_index = -1
+    for i, char in enumerate(data_part):
+        if char.isalpha():
+            first_letter_index = i
+            break
     
-    # The numeric part is between the prefix and the suffix
-    numeric_part = symbol[4:-len(non_digit_part)] if non_digit_part else symbol[4:]
+    if first_letter_index == -1:
+        logger.error(f"Could not find expiration suffix in symbol: {symbol}")
+        return None, None, None
+
+    numeric_part = data_part[:first_letter_index]
+    suffix = data_part[first_letter_index:]
 
     if not numeric_part:
         return None, None, None
-    
+
     try:
-        # --- FIX: Directly convert the numeric part to a float ---
-        strike_price = float(numeric_part)
+        # --- NEW CORRECTED LOGIC ---
+        # This logic correctly handles the special convention for Argentinian options.
+        
+        # Convention for strikes < 10000 with decimals (e.g., "38785" -> 3878.5)
+        # This also works for strikes >= 10000 with decimals (e.g., a hypothetical "123456" -> 12345.6)
+        if len(numeric_part) == 5 and not numeric_part.startswith('1'):
+             strike_price = float(numeric_part) / 10.0
+        elif len(numeric_part) > 5:
+             strike_price = float(numeric_part) / 10.0
+        # Convention for whole number strikes (e.g., "4200" -> 4200.0 or "10079" -> 10079.0)
+        else:
+             strike_price = float(numeric_part)
+
     except ValueError:
         logger.error(f"Failed to parse strike from symbol: {symbol}")
         return None, None, None
-        
-    expiration = EXPIRATION_MAP_2025.get(non_digit_part, None)
+
+    expiration = EXPIRATION_MAP_2025.get(suffix, None)
     return option_type, strike_price, expiration
 def get_ggal_data() -> tuple[dict | None, list]:
     stock_data = fetch_data(STOCK_URL)
