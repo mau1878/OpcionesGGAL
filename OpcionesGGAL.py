@@ -547,107 +547,95 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
         st.warning("No valid strategy selected for visualization.")
         logger.warning("No strikes in strategy_result")
         return
+
     prices = np.linspace(max(0, current_price * 0.5), current_price * 1.5, 50)
     times = np.linspace(0, expiration_days, 20)
     X, Y = np.meshgrid(prices, times)
     Z = np.zeros_like(X)
-    net_cost = strategy_result.get("net_cost", 0)
-    max_loss = strategy_result.get("max_loss", 0)
-    max_profit_val = strategy_result.get("max_profit", 0)
-    strikes = strategy_result["strikes"]
-    len_strikes = len(strikes)
-    is_unlimited = isinstance(max_profit_val, str) and max_profit_val == "Unlimited"
-    if is_unlimited:
-        max_profit_val = float('inf')
 
+    net_cost = strategy_result.get("net_cost", 0)
+    strikes = strategy_result["strikes"]
+
+    # This loop calculates the profit/loss at EXPIRATION for each underlying price.
+    # The result is then projected across the time axis for visualization.
     for i in range(len(times)):
-        time_factor = (expiration_days - times[i]) / expiration_days if expiration_days > 0 else 1
-        theta_decay = (1 - time_factor) * iv * 0.5
         for j in range(len(prices)):
             price = prices[j]
-            if len_strikes == 2 and "breakeven" in strategy_result:  # Spreads
-                long_strike = strategy_result["long_strike"]
-                short_strike = strategy_result["short_strike"]
-                if "Bull Call Spread" in key:
-                    if price <= long_strike:
-                        profit = -net_cost
-                    elif price <= short_strike:
-                        profit = (price - long_strike) * 100 * time_factor - net_cost
-                    else:
-                        profit = min(max_profit_val, (short_strike - long_strike) * 100) * time_factor - net_cost
-                elif "Bull Put Spread" in key:
-                    if price <= long_strike:
-                        profit = -max_loss * time_factor
-                    elif price <= short_strike:
-                        profit = ((price - long_strike) * 100 + net_cost) * time_factor
-                    else:
-                        profit = max_profit_val * time_factor
-                elif "Bear Call Spread" in key:
-                    if price <= short_strike:
-                        profit = max_profit_val * time_factor
-                    elif price <= long_strike:
-                        profit = (max_profit_val - (price - short_strike) * 100) * time_factor
-                    else:
-                        profit = -max_loss * time_factor
-                elif "Bear Put Spread" in key:
-                    if price <= short_strike:
-                        profit = max_profit_val * time_factor
-                    elif price <= long_strike:
-                        profit = ((long_strike - price) * 100 - net_cost) * time_factor
-                    else:
-                        profit = -net_cost * time_factor
-                else:
-                    profit = 0
-            elif len_strikes == 1:  # Straddle
+            payoff = 0.0
+
+            # Determine strategy from the key and calculate its payoff at expiration
+            strategy_key = key.lower()
+
+            if "bull call spread" in strategy_key:
+                long_strike, short_strike = strikes
+                long_call_payoff = max(0, price - long_strike)
+                short_call_payoff = max(0, price - short_strike)
+                payoff = (long_call_payoff - short_call_payoff) * 100
+                Z[i, j] = payoff - net_cost
+
+            elif "bull put spread" in strategy_key:
+                long_strike, short_strike = strikes
+                short_put_payoff = max(0, short_strike - price)
+                long_put_payoff = max(0, long_strike - price)
+                payoff = (-short_put_payoff + long_put_payoff) * 100
+                Z[i, j] = payoff + net_cost  # net_cost is a credit (negative)
+
+            elif "bear call spread" in strategy_key:
+                short_strike, long_strike = strikes
+                short_call_payoff = max(0, price - short_strike)
+                long_call_payoff = max(0, price - long_strike)
+                payoff = (-short_call_payoff + long_call_payoff) * 100
+                Z[i, j] = payoff + net_cost  # net_cost is a credit (negative)
+
+            elif "bear put spread" in strategy_key:
+                short_strike, long_strike = strikes
+                long_put_payoff = max(0, long_strike - price)
+                short_put_payoff = max(0, short_strike - price)
+                payoff = (long_put_payoff - short_put_payoff) * 100
+                Z[i, j] = payoff - net_cost
+
+            elif "straddle" in strategy_key:
                 strike = strikes[0]
-                be_upper = strategy_result["breakeven_upper"]
-                be_lower = strategy_result["breakeven_lower"]
-                if price <= be_lower or price >= be_upper:
-                    profit = (abs(price - strike) * 100 - net_cost) * time_factor
-                else:
-                    profit = -net_cost * time_factor
-            elif len_strikes == 2 and "breakeven_upper" in strategy_result:  # Strangle
+                call_payoff = max(0, price - strike)
+                put_payoff = max(0, strike - price)
+                payoff = (call_payoff + put_payoff) * 100
+                Z[i, j] = payoff - net_cost
+
+            elif "strangle" in strategy_key:
                 put_strike, call_strike = strikes
-                be_upper = strategy_result["breakeven_upper"]
-                be_lower = strategy_result["breakeven_lower"]
-                if price <= be_lower:
-                    profit = (be_lower - price) * 100 * time_factor - net_cost
-                elif price >= be_upper:
-                    profit = (price - be_upper) * 100 * time_factor - net_cost
-                else:
-                    profit = -net_cost * time_factor
-            elif len_strikes == 3:  # Butterfly
+                call_payoff = max(0, price - call_strike)
+                put_payoff = max(0, put_strike - price)
+                payoff = (call_payoff + put_payoff) * 100
+                Z[i, j] = payoff - net_cost
+
+            elif "butterfly" in strategy_key:
                 low, mid, high = strikes
-                width_low = mid - low
-                width_high = high - mid
-                if width_low < MIN_GAP or width_high < MIN_GAP:
-                    profit = 0
-                elif price <= low or price >= high:
-                    profit = -net_cost * time_factor
-                elif price <= mid:
-                    profit = ((price - low) / width_low * max_profit_val - net_cost) * time_factor
-                else:
-                    profit = ((high - price) / width_high * max_profit_val - net_cost) * time_factor
-            elif len_strikes == 4:  # Condor
+                # Note: This assumes a standard 1x(-2)x1 contract ratio for visualization shape.
+                if "call" in strategy_key:
+                    payoff = (max(0, price - low) - 2 * max(0, price - mid) + max(0, price - high)) * 100
+                else:  # Put Butterfly
+                    payoff = (max(0, low - price) - 2 * max(0, mid - price) + max(0, high - price)) * 100
+                Z[i, j] = payoff - net_cost
+
+            elif "condor" in strategy_key:
                 low, mid_low, mid_high, high = strikes
-                width_low = mid_low - low
-                width_high = high - mid_high
-                if width_low < MIN_GAP or width_high < MIN_GAP:
-                    profit = 0
-                elif price <= low or price >= high:
-                    profit = -net_cost * time_factor
-                elif price <= mid_low:
-                    profit = ((price - low) / width_low * max_profit_val - net_cost) * time_factor
-                elif price <= mid_high:
-                    profit = (max_profit_val - net_cost) * time_factor
-                else:
-                    profit = ((high - price) / width_high * max_profit_val - net_cost) * time_factor
-            else:
-                profit = 0
-            Z[i, j] = profit * (1 + theta_decay)
-    fig = go.Figure(data=[go.Surface(z=Z, x=X, y=Y, colorscale='RdYlGn')])
-    fig.update_layout(title=f"3D Payoff: {key.split('_')[-1]}", scene=dict(xaxis_title='Underlying Price', yaxis_title='Days to Expiration', zaxis_title='Profit/Loss (ARS)'))
-    st.plotly_chart(fig, key=key)
+                # Note: This assumes a standard 1x(-1)x(-1)x1 contract ratio for visualization shape.
+                if "call" in strategy_key:
+                    payoff = (max(0, price - low) - max(0, price - mid_low) - max(0, price - mid_high) + max(0, price - high)) * 100
+                else:  # Put Condor
+                    payoff = (max(0, low - price) - max(0, mid_low - price) - max(0, mid_high - price) + max(0, high - price)) * 100
+                Z[i, j] = payoff - net_cost
+
+    fig = go.Figure(data=[go.Surface(z=Z, x=X, y=Y, colorscale='RdYlGn', cmin=Z.min(), cmax=Z.max())])
+    fig.update_layout(
+        title=f"Payoff at Expiration: {key}",
+        scene=dict(
+            xaxis_title='Underlying Price (ARS)',
+            yaxis_title='Days to Expiration',
+            zaxis_title='Profit/Loss (ARS)'
+        )
+    )
+    st.plotly_chart(fig, use_container_width=True, key=key)
 
 def display_spread_matrix(tab, strategy_name, options, strategy_func, is_bullish):
     with tab:
