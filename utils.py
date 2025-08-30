@@ -264,6 +264,9 @@ def calculate_call_butterfly(low_opt, mid_opt, high_opt, num_contracts, commissi
         "contract_ratios": [low_contracts, mid_contracts, high_contracts]
     }
     return result if max_profit > 0 else None
+
+
+# REPLACE this function in utils.py
 def calculate_put_butterfly(low_opt, mid_opt, high_opt, num_contracts, commission_rate):
     if not (low_opt["strike"] < mid_opt["strike"] < high_opt["strike"]):
         return None
@@ -273,47 +276,43 @@ def calculate_put_butterfly(low_opt, mid_opt, high_opt, num_contracts, commissio
     if any(p is None for p in [low_price, mid_price, high_price]):
         return None
 
+    # --- LOGIC FOR BALANCED/UNBALANCED BUTTERFLY (Copied from Call version) ---
     gap1 = mid_opt["strike"] - low_opt["strike"]
     gap2 = high_opt["strike"] - mid_opt["strike"]
-    if gap1 < MIN_GAP or gap2 < MIN_GAP:
-        logger.warning(f"Invalid gaps: gap1={gap1}, gap2={gap2} for strikes {low_opt['strike']}, {mid_opt['strike']}, {high_opt['strike']}")
-        return None
+    if gap1 < MIN_GAP or gap2 < MIN_GAP: return None
 
     scale = 100
     g = gcd(int(gap1 * scale), int(gap2 * scale)) / scale
-    if g < MIN_GAP:
-        g = MIN_GAP
-    gap1_units = gap1 / g
-    gap2_units = gap2 / g
+    if g < MIN_GAP: g = MIN_GAP
 
-    if abs(gap1 - gap2) < MIN_GAP:
-        low_contracts = num_contracts
-        mid_contracts = -2 * num_contracts
-        high_contracts = num_contracts
-        min_contracts = 1
-    else:
-        low_contracts = num_contracts * int(gap2_units)
-        mid_contracts = -num_contracts * int(gap1_units + gap2_units)
-        high_contracts = num_contracts * int(gap1_units)
-        min_contracts = int(gcd(int(gap1_units), int(gap2_units)))
+    gap1_units = round(gap1 / g)
+    gap2_units = round(gap2 / g)
+
+    low_contracts = num_contracts * gap2_units
+    mid_contracts = -num_contracts * (gap1_units + gap2_units)
+    high_contracts = num_contracts * gap1_units
 
     base_cost = (low_price * abs(low_contracts) + high_price * abs(high_contracts)) * 100
     commission, market_fees, vat = calculate_fees(base_cost, commission_rate)
-    net_cost = (low_price * low_contracts + mid_price * mid_contracts + high_price * high_contracts) * 100 + commission + market_fees + vat
-    if net_cost <= 0:
-        return None
-    max_profit = (high_opt["strike"] - mid_opt["strike"]) * abs(high_contracts) * 100 - net_cost
+    net_cost = (
+                           low_price * low_contracts + mid_price * mid_contracts + high_price * high_contracts) * 100 + commission + market_fees + vat
+
+    if net_cost <= 0: return None
+
+    # Note: Max profit calculation for put butterfly is slightly different
+    max_profit = (mid_opt["strike"] - low_opt["strike"]) * abs(low_contracts) * 100 - net_cost
     max_loss = net_cost
+
     result = {
         "max_profit": max(0, max_profit),
         "net_cost": net_cost,
         "max_loss": max_loss,
         "contracts": f"{low_contracts} : {mid_contracts} : {high_contracts}",
-        "min_contracts": min_contracts,
-        "strikes": [low_opt["strike"], mid_opt["strike"], high_opt["strike"]]
+        "strikes": [low_opt["strike"], mid_opt["strike"], high_opt["strike"]],
+        # --- FIX: Pass the contract ratios to the visualizer ---
+        "contract_ratios": [low_contracts, mid_contracts, high_contracts]
     }
     return result if max_profit > 0 else None
-
 def lcm(a, b):
     return abs(a * b) / gcd(int(a * 100), int(b * 100)) * 100 if a and b else 0
 
