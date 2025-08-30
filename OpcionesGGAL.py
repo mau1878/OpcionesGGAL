@@ -578,7 +578,6 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
         logger.warning("No strikes in strategy_result")
         return
 
-    # --- FIX: Use the correct key "Net Cost" from the DataFrame ---
     net_cost = strategy_result.get("Net Cost", strategy_result.get("net_cost", 0))
     
     if net_cost is None:
@@ -607,15 +606,16 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
     strategy_key = key.lower() if key else ""
     r = 0.05  # Assumed risk-free rate
 
-    # Calculate P/L for each point in time and price using Black-Scholes
+    # --- FIX: Corrected the indexing from [j, i] to [i, j] ---
     for i in range(len(times)):
         for j in range(len(prices)):
-            price = X[j, i]
-            time_to_exp_days = expiration_days - Y[j, i]
+            price = X[i, j]
+            time_to_exp_days = expiration_days - Y[i, j]
             T = time_to_exp_days / 365.0
             
             position_value = 0.0
 
+            # ... (The entire Black-Scholes calculation block remains the same)
             if "bull call spread" in strategy_key or "bear call spread" in strategy_key:
                 k1, k2 = strikes
                 val1 = black_scholes(price, k1, T, r, iv, "call")
@@ -652,10 +652,7 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
                 val4 = black_scholes(price, k4, T, r, iv, opt_type)
                 position_value = (val1 - val2 - val3 + val4) * 100
 
-            # For credit spreads, net_cost is negative (a credit received)
-            # For debit spreads, net_cost is positive (a debit paid)
-            # The P/L is always the current value minus the initial cost.
-            Z[j, i] = position_value - net_cost
+            Z[i, j] = position_value - net_cost
 
     # Create the main payoff surface
     payoff_surface = go.Surface(z=Z, x=X, y=Y, colorscale='RdYlGn', cmin=Z.min(), cmax=Z.max(), colorbar=dict(title='Profit/Loss'))
@@ -669,6 +666,7 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
         scene=dict(xaxis_title='Underlying Price (ARS)', yaxis_title='Days Elapsed', zaxis_title='Profit/Loss (ARS)')
     )
     st.plotly_chart(fig, use_container_width=True, key=f"chart_{key}")
+
 def display_spread_matrix(tab, strategy_name, options, strategy_func, is_bullish):
     with tab:
         st.subheader(f"Matriz de {strategy_name}")
