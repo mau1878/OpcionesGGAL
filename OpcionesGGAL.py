@@ -53,18 +53,25 @@ def parse_option_symbol(symbol: str) -> tuple[str | None, float | None, date | N
         option_type = "put"
     else:
         return None, None, None
-    numeric_part = "".join(filter(str.isdigit, symbol[4:]))
+    
+    # Extract all characters that are not digits to find the expiration suffix
+    non_digit_part = ''.join(filter(lambda x: not x.isdigit(), symbol[4:]))
+    
+    # The numeric part is between the prefix and the suffix
+    numeric_part = symbol[4:-len(non_digit_part)] if non_digit_part else symbol[4:]
+
     if not numeric_part:
         return None, None, None
+    
     try:
-        strike_price = float(numeric_part[:4] + "." + numeric_part[4:]) if len(numeric_part) > 4 else float(numeric_part)
+        # --- FIX: Directly convert the numeric part to a float ---
+        strike_price = float(numeric_part)
     except ValueError:
         logger.error(f"Failed to parse strike from symbol: {symbol}")
         return None, None, None
-    suffix = symbol[4 + len(numeric_part):]
-    expiration = EXPIRATION_MAP_2025.get(suffix, None)
+        
+    expiration = EXPIRATION_MAP_2025.get(non_digit_part, None)
     return option_type, strike_price, expiration
-
 def get_ggal_data() -> tuple[dict | None, list]:
     stock_data = fetch_data(STOCK_URL)
     options_data = fetch_data(OPTIONS_URL)
@@ -555,87 +562,84 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
 
     net_cost = strategy_result.get("net_cost", 0)
     strikes = strategy_result["strikes"]
+    strategy_key = key.lower() if key else ""
 
-    # This loop calculates the profit/loss at EXPIRATION for each underlying price.
-    # The result is then projected across the time axis for visualization.
+    # Calculate payoff at expiration and project it across the time axis
     for i in range(len(times)):
         for j in range(len(prices)):
             price = prices[j]
             payoff = 0.0
 
-            # Determine strategy from the key and calculate its payoff at expiration
-            strategy_key = key.lower()
-
             if "bull call spread" in strategy_key:
                 long_strike, short_strike = strikes
-                long_call_payoff = max(0, price - long_strike)
-                short_call_payoff = max(0, price - short_strike)
-                payoff = (long_call_payoff - short_call_payoff) * 100
+                payoff = (max(0, price - long_strike) - max(0, price - short_strike)) * 100
                 Z[i, j] = payoff - net_cost
-
             elif "bull put spread" in strategy_key:
                 long_strike, short_strike = strikes
-                short_put_payoff = max(0, short_strike - price)
-                long_put_payoff = max(0, long_strike - price)
-                payoff = (-short_put_payoff + long_put_payoff) * 100
-                Z[i, j] = payoff + net_cost  # net_cost is a credit (negative)
-
+                payoff = (max(0, long_strike - price) - max(0, short_strike - price)) * 100
+                Z[i, j] = payoff - net_cost # net_cost is a credit (negative)
             elif "bear call spread" in strategy_key:
                 short_strike, long_strike = strikes
-                short_call_payoff = max(0, price - short_strike)
-                long_call_payoff = max(0, price - long_strike)
-                payoff = (-short_call_payoff + long_call_payoff) * 100
-                Z[i, j] = payoff + net_cost  # net_cost is a credit (negative)
-
+                payoff = (max(0, price - long_strike) - max(0, price - short_strike)) * 100
+                Z[i, j] = payoff - net_cost # net_cost is a credit (negative)
             elif "bear put spread" in strategy_key:
                 short_strike, long_strike = strikes
-                long_put_payoff = max(0, long_strike - price)
-                short_put_payoff = max(0, short_strike - price)
-                payoff = (long_put_payoff - short_put_payoff) * 100
+                payoff = (max(0, long_strike - price) - max(0, short_strike - price)) * 100
                 Z[i, j] = payoff - net_cost
-
             elif "straddle" in strategy_key:
                 strike = strikes[0]
-                call_payoff = max(0, price - strike)
-                put_payoff = max(0, strike - price)
-                payoff = (call_payoff + put_payoff) * 100
+                payoff = (max(0, price - strike) + max(0, strike - price)) * 100
                 Z[i, j] = payoff - net_cost
-
             elif "strangle" in strategy_key:
                 put_strike, call_strike = strikes
-                call_payoff = max(0, price - call_strike)
-                put_payoff = max(0, put_strike - price)
-                payoff = (call_payoff + put_payoff) * 100
+                payoff = (max(0, price - call_strike) + max(0, put_strike - price)) * 100
                 Z[i, j] = payoff - net_cost
-
             elif "butterfly" in strategy_key:
                 low, mid, high = strikes
-                # Note: This assumes a standard 1x(-2)x1 contract ratio for visualization shape.
                 if "call" in strategy_key:
                     payoff = (max(0, price - low) - 2 * max(0, price - mid) + max(0, price - high)) * 100
-                else:  # Put Butterfly
+                else:
                     payoff = (max(0, low - price) - 2 * max(0, mid - price) + max(0, high - price)) * 100
                 Z[i, j] = payoff - net_cost
-
             elif "condor" in strategy_key:
                 low, mid_low, mid_high, high = strikes
-                # Note: This assumes a standard 1x(-1)x(-1)x1 contract ratio for visualization shape.
                 if "call" in strategy_key:
                     payoff = (max(0, price - low) - max(0, price - mid_low) - max(0, price - mid_high) + max(0, price - high)) * 100
-                else:  # Put Condor
+                else:
                     payoff = (max(0, low - price) - max(0, mid_low - price) - max(0, mid_high - price) + max(0, high - price)) * 100
                 Z[i, j] = payoff - net_cost
 
-    fig = go.Figure(data=[go.Surface(z=Z, x=X, y=Y, colorscale='RdYlGn', cmin=Z.min(), cmax=Z.max())])
+    # --- NEW VISUALIZATION LOGIC ---
+    # 1. Create the main payoff surface
+    payoff_surface = go.Surface(
+        z=Z, x=X, y=Y,
+        colorscale='RdYlGn',
+        cmin=Z.min(), cmax=Z.max(),
+        colorbar=dict(title='Profit/Loss'),
+        name='Payoff Surface'
+    )
+
+    # 2. Create a transparent plane at z=0 for breakeven
+    breakeven_plane = go.Surface(
+        z=np.zeros_like(X), x=X, y=Y,
+        opacity=0.7,
+        showscale=False,
+        colorscale=[[0, '#0000FF'], [1, '#0000FF']], # Single color (blue)
+        name='Breakeven Plane'
+    )
+
+    fig = go.Figure(data=[payoff_surface, breakeven_plane])
+    
     fig.update_layout(
-        title=f"Payoff at Expiration: {key}",
+        title=f"Payoff at Expiration: {key.replace('_', ' ').title()}",
         scene=dict(
             xaxis_title='Underlying Price (ARS)',
             yaxis_title='Days to Expiration',
             zaxis_title='Profit/Loss (ARS)'
-        )
+        ),
+        legend=dict(x=0, y=1, traceorder='normal')
     )
-    st.plotly_chart(fig, use_container_width=True, key=key)
+    st.plotly_chart(fig, use_container_width=True, key=f"chart_{key}")
 
 def display_spread_matrix(tab, strategy_name, options, strategy_func, is_bullish):
     with tab:
