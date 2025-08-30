@@ -600,24 +600,26 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
                 opt_type = "call" if "call" in strategy_key else "put"
                 vals = [black_scholes(price, k, T, r, iv, opt_type) for k in [low_k, mid_k, high_k]]
                 position_value = (ratios[0] * vals[0] + ratios[1] * vals[1] + ratios[2] * vals[2]) * 100
-            # --- FIX: Add corrected logic for condor visualization ---
             elif "condor" in strategy_key:
                 ratios = strategy_result.get("contract_ratios", [1, -1, -1, 1])
                 k1, k2, k3, k4 = strikes
                 opt_type = "call" if "call" in strategy_key else "put"
                 vals = [black_scholes(price, k, T, r, iv, opt_type) for k in strikes]
-                position_value = (ratios[0] * vals[0] + ratios[1] * vals[1] + ratios[2] * vals[2] + ratios[3] * vals[
-                    3]) * 100
-            elif "bull call spread" in strategy_key or "bear call spread" in strategy_key:
+                position_value = (ratios[0] * vals[0] + ratios[1] * vals[1] + ratios[2] * vals[2] + ratios[3] * vals[3]) * 100
+            elif "call spread" in strategy_key:
                 k1, k2 = strikes
                 val1 = black_scholes(price, k1, T, r, iv, "call")
                 val2 = black_scholes(price, k2, T, r, iv, "call")
                 position_value = (val1 - val2) * 100
-            elif "bull put spread" in strategy_key or "bear put spread" in strategy_key:
+                if "bear" in strategy_key:
+                    position_value *= -1
+            elif "put spread" in strategy_key:
                 k1, k2 = strikes
                 val1 = black_scholes(price, k1, T, r, iv, "put")
                 val2 = black_scholes(price, k2, T, r, iv, "put")
                 position_value = (val1 - val2) * 100
+                if "bear" in strategy_key:
+                    position_value *= -1
             elif "straddle" in strategy_key:
                 k1 = strikes[0]
                 val_call = black_scholes(price, k1, T, r, iv, "call")
@@ -632,7 +634,7 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
             Z[i, j] = position_value - net_cost
 
     payoff_surface = go.Surface(z=Z, x=X, y=Y, colorscale='RdYlGn', cmin=Z.min(), cmax=Z.max(),
-                                colorbar=dict(title='Profit/Loss'))
+                               colorbar=dict(title='Profit/Loss'))
     breakeven_plane = go.Surface(z=np.zeros_like(X), x=X, y=Y, opacity=0.7, showscale=False,
                                  colorscale=[[0, '#0000FF'], [1, '#0000FF']])
     fig = go.Figure(data=[payoff_surface, breakeven_plane])
