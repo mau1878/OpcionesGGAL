@@ -656,23 +656,47 @@ def display_spread_matrix(tab, strategy_name, options, strategy_func, is_bullish
             label = "Relación crédito a pérdida"
 
         profit_df, cost_df, ratio_df, breakeven_df = create_spread_matrix(options, strategy_func, st.session_state.num_contracts, st.session_state.commission_rate, is_bullish)
-        if st.session_state.disable_filter:
-            filtered_profit_df = profit_df
-        else:
-            mask = ratio_df <= filter_ratio if is_bullish else ratio_df >= filter_ratio
-            filtered_profit_df = profit_df.where(mask, np.nan)
+        
+        mask = ratio_df <= filter_ratio if is_bullish else ratio_df >= filter_ratio
+        filtered_profit_df = profit_df.where(mask, np.nan)
 
         st.write("**Matriz de ganancia máxima (ARS)**")
         st.dataframe(filtered_profit_df.style.format("{:.2f}").background_gradient(cmap='RdYlGn'))
 
-        st.write("**Matriz de costo neto (ARS)**")
-        st.dataframe(cost_df.style.format("{:.2f}").background_gradient(cmap='RdYlGn_r'))
+        # --- NEW VISUALIZATION UI ADDED BELOW ---
+        st.subheader("Visualización 3D para una combinación específica")
+        
+        strike_prices = sorted([opt['strike'] for opt in options])
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            long_strike_price = st.selectbox(
+                "Selecciona el strike de COMPRA (Long)", 
+                strike_prices, 
+                key=f"long_select_{strategy_name}"
+            )
+        with col2:
+            short_strike_price = st.selectbox(
+                "Selecciona el strike de VENTA (Short)", 
+                strike_prices, 
+                key=f"short_select_{strategy_name}"
+            )
 
-        st.write(f"**Matriz de {label}**")
-        st.dataframe(ratio_df.style.format("{:.2f}").background_gradient(cmap='RdYlGn'))
+        if long_strike_price and short_strike_price:
+            long_opt = next((opt for opt in options if opt['strike'] == long_strike_price), None)
+            short_opt = next((opt for opt in options if opt['strike'] == short_strike_price), None)
 
-        st.write("**Matriz de punto de equilibrio**")
-        st.dataframe(breakeven_df.style.format("{:.2f}").background_gradient(cmap='coolwarm'))
+            if long_opt and short_opt:
+                # The strategy function itself contains the logic for valid strike combinations
+                result = strategy_func(long_opt, short_opt, st.session_state.num_contracts, st.session_state.commission_rate)
+                
+                if result:
+                    st.success("Combinación válida encontrada. Generando gráfico...")
+                    expiration_days = max(1, (st.session_state.selected_exp - date.today()).days)
+                    # Pass the strategy_name to the key so the visualization function knows what to draw
+                    visualize_3d_payoff(result, st.session_state.current_price, expiration_days, st.session_state.iv, key=strategy_name)
+                else:
+                    st.warning("La combinación de strikes seleccionada no es válida para esta estrategia (ej: en un Bull Call, el strike de compra debe ser menor que el de venta).")
 
 def display_complex_strategy(tab, strategy_name, options, strategy_func, combo_size):
     with tab:
