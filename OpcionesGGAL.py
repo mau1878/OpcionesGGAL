@@ -18,9 +18,9 @@ def get_third_friday(year: int, month: int) -> date:
     return first_friday + timedelta(days=14)
 
 EXPIRATION_MAP_2025 = {
-    "M": get_third_friday(2025, 3), "MA": get_third_friday(2025, 3),
-    "A": get_third_friday(2025, 4), "AB": get_third_friday(2025, 4),
-    "J": get_third_friday(2025, 6), "JU": get_third_friday(2025, 6)
+    "O": get_third_friday(2025, 10), "OC": get_third_friday(2025, 10),
+    "N": get_third_friday(2025, 11), "NO": get_third_friday(2025, 11),
+    "D": get_third_friday(2025, 12), "DI": get_third_friday(2025, 12)
 }
 
 def fetch_data(url: str) -> list:
