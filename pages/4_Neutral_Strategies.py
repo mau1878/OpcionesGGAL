@@ -15,7 +15,7 @@ tab1, tab2, tab3, tab4 = st.tabs(["Call Butterfly", "Put Butterfly", "Call Condo
 
 with tab1:
     st.subheader("Call Butterfly")
-    df = utils.create_complex_strategy_table(calls, utils.calculate_call_butterfly, st.session_state.num_contracts, st.session_state.commission_rate, 3)
+    df = utils.create_neutral_table(calls, utils.calculate_call_butterfly, st.session_state.num_contracts, st.session_state.commission_rate, 3)
     if not df.empty:
         styled_df = df.style.format({"net_cost": "{:.2f}", "max_profit": "{:.2f}", "max_loss": "{:.2f}", "lower_breakeven": "{:.2f}", "upper_breakeven": "{:.2f}"})
         st.dataframe(styled_df)
@@ -30,14 +30,15 @@ with tab1:
         result["strikes"] = list(selected) if isinstance(selected, tuple) else [selected]
         result["num_contracts"] = st.session_state.num_contracts
         result["contract_ratios"] = [1, -2, 1]
+        result["raw_net"] = result["net_cost"]  # Assuming debit
         if result:
-            utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Call Butterfly")
+            utils.visualize_neutral_3d(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Call Butterfly")
         else:
             st.warning("Selección inválida. Por favor, seleccione una combinación válida.")
 
 with tab2:
     st.subheader("Put Butterfly")
-    df = utils.create_complex_strategy_table(puts, utils.calculate_put_butterfly, st.session_state.num_contracts, st.session_state.commission_rate, 3)
+    df = utils.create_neutral_table(puts, utils.calculate_put_butterfly, st.session_state.num_contracts, st.session_state.commission_rate, 3)
     if not df.empty:
         styled_df = df.style.format({"net_cost": "{:.2f}", "max_profit": "{:.2f}", "max_loss": "{:.2f}", "lower_breakeven": "{:.2f}", "upper_breakeven": "{:.2f}"})
         st.dataframe(styled_df)
@@ -52,14 +53,15 @@ with tab2:
         result["strikes"] = list(selected) if isinstance(selected, tuple) else [selected]
         result["num_contracts"] = st.session_state.num_contracts
         result["contract_ratios"] = [1, -2, 1]
+        result["raw_net"] = result["net_cost"]
         if result:
-            utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Put Butterfly")
+            utils.visualize_neutral_3d(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Put Butterfly")
         else:
             st.warning("Selección inválida. Por favor, seleccione una combinación válida.")
 
 with tab3:
     st.subheader("Call Condor")
-    df = utils.create_complex_strategy_table(calls, utils.calculate_call_condor, st.session_state.num_contracts, st.session_state.commission_rate, 4)
+    df = utils.create_neutral_table(calls, utils.calculate_call_condor, st.session_state.num_contracts, st.session_state.commission_rate, 4)
     if not df.empty:
         styled_df = df.style.format({"net_cost": "{:.2f}", "max_profit": "{:.2f}", "max_loss": "{:.2f}", "lower_breakeven": "{:.2f}", "upper_breakeven": "{:.2f}"})
         st.dataframe(styled_df)
@@ -74,14 +76,15 @@ with tab3:
         result["strikes"] = list(selected) if isinstance(selected, tuple) else [selected]
         result["num_contracts"] = st.session_state.num_contracts
         result["contract_ratios"] = [1, -1, -1, 1]
+        result["raw_net"] = result["net_cost"]
         if result:
-            utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Call Condor")
+            utils.visualize_neutral_3d(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Call Condor")
         else:
             st.warning("Selección inválida. Por favor, seleccione una combinación válida.")
 
 with tab4:
     st.subheader("Put Condor")
-    df = utils.create_complex_strategy_table(puts, utils.calculate_put_condor, st.session_state.num_contracts, st.session_state.commission_rate, 4)
+    df = utils.create_neutral_table(puts, utils.calculate_put_condor, st.session_state.num_contracts, st.session_state.commission_rate, 4)
     if not df.empty:
         styled_df = df.style.format({"net_cost": "{:.2f}", "max_profit": "{:.2f}", "max_loss": "{:.2f}", "lower_breakeven": "{:.2f}", "upper_breakeven": "{:.2f}"})
         st.dataframe(styled_df)
@@ -96,7 +99,8 @@ with tab4:
         result["strikes"] = list(selected) if isinstance(selected, tuple) else [selected]
         result["num_contracts"] = st.session_state.num_contracts
         result["contract_ratios"] = [1, -1, -1, 1]
+        result["raw_net"] = result["net_cost"]
         if result:
-            utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Put Condor")
+            utils.visualize_neutral_3d(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Put Condor")
         else:
             st.warning("Selección inválida. Por favor, seleccione una combinación válida.")

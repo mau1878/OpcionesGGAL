@@ -15,7 +15,7 @@ tab1, tab2 = st.tabs(["Straddle", "Strangle"])
 
 with tab1:
     st.subheader("Long Straddle")
-    df = utils.create_vol_strategy_table(calls, puts, utils.calculate_straddle, st.session_state.num_contracts, st.session_state.commission_rate)
+    df = utils.create_volatility_table(calls, puts, utils.calculate_straddle, st.session_state.num_contracts, st.session_state.commission_rate)
     if not df.empty:
         styled_df = df.style.format({"net_cost": "{:.2f}", "max_loss": "{:.2f}", "lower_breakeven": "{:.2f}", "upper_breakeven": "{:.2f}"})
         st.dataframe(styled_df)
@@ -29,15 +29,15 @@ with tab1:
         result = row.to_dict()
         result["strikes"] = [selected] if isinstance(selected, (int, float)) else list(selected)
         result["num_contracts"] = st.session_state.num_contracts
+        result["raw_net"] = result["net_cost"]
         if result:
-            utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Straddle")
+            utils.visualize_volatility_3d(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Straddle")
         else:
             st.warning("Selección inválida. Por favor, seleccione una combinación válida.")
 
 with tab2:
     st.subheader("Long Strangle")
-    # FIX: Swapped to product(puts, calls) to match calculate_strangle's put < call check
-    df = utils.create_vol_strategy_table(puts, calls, utils.calculate_strangle, st.session_state.num_contracts, st.session_state.commission_rate)
+    df = utils.create_volatility_table(puts, calls, utils.calculate_strangle, st.session_state.num_contracts, st.session_state.commission_rate)
     if not df.empty:
         styled_df = df.style.format({"net_cost": "{:.2f}", "max_loss": "{:.2f}", "lower_breakeven": "{:.2f}", "upper_breakeven": "{:.2f}"})
         st.dataframe(styled_df)
@@ -51,7 +51,8 @@ with tab2:
         result = row.to_dict()
         result["strikes"] = list(selected) if isinstance(selected, tuple) else [selected]
         result["num_contracts"] = st.session_state.num_contracts
+        result["raw_net"] = result["net_cost"]
         if result:
-            utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Strangle")
+            utils.visualize_volatility_3d(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Strangle")
         else:
             st.warning("Selección inválida. Por favor, seleccione una combinación válida.")

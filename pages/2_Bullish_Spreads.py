@@ -17,7 +17,7 @@ tab1, tab2 = st.tabs(["Bull Call Spread", "Bull Put Spread"])
 with tab1:
     st.header("Bull Call Spread (Débito)")
     st.subheader("Análisis Detallado por Ratio")
-    detailed_df_call = utils.create_spread_table(calls, utils.calculate_bull_call_spread, st.session_state.num_contracts, st.session_state.commission_rate, True)
+    detailed_df_call = utils.create_bullish_spread_table(calls, utils.calculate_bull_call_spread, st.session_state.num_contracts, st.session_state.commission_rate, is_debit=True)
     if not detailed_df_call.empty:
         st.dataframe(detailed_df_call.style.format({
             "Net Cost": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}", "Cost-to-Profit Ratio": "{:.2%}", "Breakeven": "{:.2f}"
@@ -39,15 +39,17 @@ with tab1:
         result = row.to_dict()
         result["strikes"] = list(selected) if isinstance(selected, tuple) else [selected]
         result["num_contracts"] = st.session_state.num_contracts
+        result["raw_net"] = result["Net Cost"]  # Add for calibration
+        result["net_cost"] = result["Net Cost"]
         if result:
-            utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Bull Call Spread")
+            utils.visualize_bullish_3d(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Bull Call Spread")
         else:
             st.warning("Selección inválida. Por favor, seleccione una combinación válida.")
 
 with tab2:
     st.header("Bull Put Spread (Crédito)")
     st.subheader("Análisis Detallado por Ratio")
-    detailed_df_put = utils.create_spread_table(puts, utils.calculate_bull_put_spread, st.session_state.num_contracts, st.session_state.commission_rate, False)
+    detailed_df_put = utils.create_bullish_spread_table(puts, utils.calculate_bull_put_spread, st.session_state.num_contracts, st.session_state.commission_rate, is_debit=False)
     if not detailed_df_put.empty:
         st.dataframe(detailed_df_put.style.format({
             "Net Credit": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}", "Cost-to-Profit Ratio": "{:.2%}", "Breakeven": "{:.2f}"
@@ -69,8 +71,9 @@ with tab2:
         result = row.to_dict()
         result["strikes"] = list(selected) if isinstance(selected, tuple) else [selected]
         result["num_contracts"] = st.session_state.num_contracts
+        result["raw_net"] = -result.get("Net Credit", 0)  # Credit is negative net_cost
         result["net_cost"] = -result.get("Net Credit", 0)
         if result:
-            utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Bull Put Spread")
+            utils.visualize_bullish_3d(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Bull Put Spread")
         else:
             st.warning("Selección inválida. Por favor, seleccione una combinación válida.")
