@@ -595,40 +595,81 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
             sigma = float(sigma)
         except (TypeError, ValueError):
             return 0.0
+        
+        # Handle edge cases
         if S <= 0:
             return 0 if option_type == "call" else max(K - S, 0)
         if K <= 0:
             return max(S - K, 0) if option_type == "call" else 0
-        if T <= 1e-9 or sigma <= 1e-9:
+        
+        # Use intrinsic value for very short time to expiration
+        if T <= 1e-6:
             return max(0, S - K) if option_type == "call" else max(0, K - S)
+        
+        if sigma <= 1e-9:
+            return max(0, S - K) if option_type == "call" else max(0, K - S)
+        
         with np.errstate(divide='ignore', invalid='ignore'):
             epsilon = 1e-12
             denom = sigma * np.sqrt(T) + epsilon
             d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / denom
             d2 = d1 - sigma * np.sqrt(T)
+            
             if option_type == "call":
                 val = S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
             else:
                 val = K * np.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
+        
         return np.nan_to_num(val)
+
+    def intrinsic_value(S, K, option_type="call"):
+        """Calculate intrinsic value for options near expiration"""
+        if option_type == "call":
+            return max(0, S - K)
+        else:
+            return max(0, K - S)
 
     def strategy_value(price, T, sigma):
         position_value = 0.0
         strategy_key = key.lower() if key else ""
         r = st.session_state.get("risk_free_rate", 0.50)  # 50% as per your input
+        
+        # Use intrinsic values for very short time to expiration
+        use_intrinsic = T <= 1e-6
 
         if "spread" in strategy_key:
             strikes = strategy_result["strikes"]
             k1, k2 = strikes[0], strikes[1]
 
             if "bull call" in strategy_key:
-                position_value = (black_scholes(price, k1, T, r, sigma, "call") - black_scholes(price, k2, T, r, sigma, "call"))
+                if use_intrinsic:
+                    position_value = (intrinsic_value(price, k1, "call") - intrinsic_value(price, k2, "call"))
+                else:
+                    position_value = (black_scholes(price, k1, T, r, sigma, "call") - 
+                                    black_scholes(price, k2, T, r, sigma, "call"))
+                    
             elif "bull put" in strategy_key:
-                position_value = (black_scholes(price, k1, T, r, sigma, "put") - black_scholes(price, k2, T, r, sigma, "put"))
+                if use_intrinsic:
+                    position_value = (-intrinsic_value(price, k2, "put") + intrinsic_value(price, k1, "put"))
+                else:
+                    position_value = (-black_scholes(price, k2, T, r, sigma, "put") + 
+                                    black_scholes(price, k1, T, r, sigma, "put"))
+                    
             elif "bear call" in strategy_key:
-                position_value = (black_scholes(price, k2, T, r, sigma, "call") - black_scholes(price, k1, T, r, sigma, "call"))
+                # FIXED: Bear call spread = sell lower strike, buy higher strike
+                if use_intrinsic:
+                    position_value = (-intrinsic_value(price, k1, "call") + intrinsic_value(price, k2, "call"))
+                else:
+                    position_value = (-black_scholes(price, k1, T, r, sigma, "call") + 
+                                    black_scholes(price, k2, T, r, sigma, "call"))
+                    
             elif "bear put" in strategy_key:
-                position_value = (black_scholes(price, k1, T, r, sigma, "put") - black_scholes(price, k2, T, r, sigma, "put"))
+                # FIXED: Bear put spread = buy higher strike, sell lower strike
+                if use_intrinsic:
+                    position_value = (intrinsic_value(price, k1, "put") - intrinsic_value(price, k2, "put"))
+                else:
+                    position_value = (black_scholes(price, k1, T, r, sigma, "put") - 
+                                    black_scholes(price, k2, T, r, sigma, "put"))
 
             position_value *= 100 * num_contracts
 
@@ -636,66 +677,102 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
             ratios = strategy_result.get("contract_ratios", [])
             strikes = strategy_result.get("strikes", [])
             opt_type = "call" if "call" in strategy_key else "put"
+            
             if ratios and strikes:
-                vals = [black_scholes(price, k, T, r, sigma, opt_type) for k in strikes]
+                if use_intrinsic:
+                    vals = [intrinsic_value(price, k, opt_type) for k in strikes]
+                else:
+                    vals = [black_scholes(price, k, T, r, sigma, opt_type) for k in strikes]
                 position_value = sum(r * v for r, v in zip(ratios, vals)) * 100 * num_contracts
 
         elif "straddle" in strategy_key:
             k = strategy_result["strikes"][0]
-            call_val = black_scholes(price, k, T, r, sigma, "call")
-            put_val = black_scholes(price, k, T, r, sigma, "put")
+            if use_intrinsic:
+                call_val = intrinsic_value(price, k, "call")
+                put_val = intrinsic_value(price, k, "put")
+            else:
+                call_val = black_scholes(price, k, T, r, sigma, "call")
+                put_val = black_scholes(price, k, T, r, sigma, "put")
             position_value = (call_val + put_val) * 100 * num_contracts
 
         elif "strangle" in strategy_key:
             put_k, call_k = strategy_result["strikes"]
-            call_val = black_scholes(price, call_k, T, r, sigma, "call")
-            put_val = black_scholes(price, put_k, T, r, sigma, "put")
+            if use_intrinsic:
+                call_val = intrinsic_value(price, call_k, "call")
+                put_val = intrinsic_value(price, put_k, "put")
+            else:
+                call_val = black_scholes(price, call_k, T, r, sigma, "call")
+                put_val = black_scholes(price, put_k, T, r, sigma, "put")
             position_value = (call_val + put_val) * 100 * num_contracts
 
         return position_value
 
-    # Calibrate IV
+    # Calibrate IV with better error handling
     strategy_key = key.lower() if key else ""
     r = st.session_state.get("risk_free_rate", 0.50)
+    
     def objective(sigma):
-        if sigma <= 0: return float('inf')
-        return abs(strategy_value(current_price, expiration_days / 365.0, sigma) - raw_net)
+        if sigma <= 0: 
+            return float('inf')
+        try:
+            model_value = strategy_value(current_price, expiration_days / 365.0, sigma)
+            return abs(model_value - raw_net)
+        except Exception:
+            return float('inf')
 
     try:
-        result = minimize_scalar(objective, bounds=(0.01, 10.0), method='bounded')
+        result = minimize_scalar(objective, bounds=(0.01, 5.0), method='bounded')
         calibrated_iv = result.x
-        if calibrated_iv > 0 and not np.isnan(calibrated_iv) and result.success:
+        
+        # Validate calibration result
+        if (calibrated_iv > 0 and not np.isnan(calibrated_iv) and 
+            result.success and result.fun < raw_net * 0.1):  # Within 10% tolerance
             iv = calibrated_iv
+            logger.info(f"IV calibrated to {iv:.3f} for {strategy_key}")
         else:
-            raise ValueError("Optimization failed")
+            raise ValueError("Calibration tolerance not met")
+            
     except Exception as e:
-        logger.error(f"IV calibration failed for {strategy_key}: {e}")
+        logger.warning(f"IV calibration failed for {strategy_key}: {e}. Using default IV.")
         iv = DEFAULT_IV
 
     iv = max(iv, 1e-9)
 
-    # Compute grid
+    # Compute grid with better range handling
     plot_range_pct = st.session_state.get("plot_range_pct", 0.3)
-    prices = np.linspace(max(0.1, current_price * (1 - plot_range_pct)), current_price * (1 + plot_range_pct), 50)
+    min_price = max(0.1, current_price * (1 - plot_range_pct))
+    max_price = current_price * (1 + plot_range_pct)
+    
+    prices = np.linspace(min_price, max_price, 50)
     times = np.linspace(0, expiration_days, 20)
     X, Y = np.meshgrid(prices, times)
     Z = np.zeros_like(X)
 
-    # Skip scaling, use raw values
+    # Compute payoff surface
     for i in range(len(times)):
         for j in range(len(prices)):
             price = X[i, j]
-            T = (expiration_days - Y[i, j]) / 365.0
-            T = max(T, 1e-9)
-            Z[i, j] = strategy_value(price, T, iv) - net_entry
+            T = max((expiration_days - Y[i, j]) / 365.0, 1e-9)
+            try:
+                Z[i, j] = strategy_value(price, T, iv) - net_entry
+            except Exception as e:
+                logger.warning(f"Error computing payoff at price={price}, T={T}: {e}")
+                Z[i, j] = 0
 
-    fig = go.Figure(data=[go.Surface(z=Z, x=X, y=Y)])
+    # Create 3D plot
+    fig = go.Figure(data=[go.Surface(
+        z=Z, x=X, y=Y,
+        colorscale='RdYlGn',
+        showscale=True
+    )])
+    
     fig.update_layout(
-        title="3D Payoff Visualization",
+        title=f"3D Payoff Visualization (IV: {iv:.1%})",
         scene=dict(
             xaxis_title="Underlying Price",
             yaxis_title="Days from Now",
-            zaxis_title="Profit / Loss (Raw)",
+            zaxis_title="Profit / Loss",
+            camera=dict(eye=dict(x=1.5, y=1.5, z=1.5))
         ),
         autosize=True,
         margin=dict(l=65, r=50, b=65, t=90),
