@@ -31,7 +31,8 @@ st.caption(f"Última actualización: {st.session_state.last_updated}")
 # --- Sidebar for Inputs ---
 st.sidebar.header("Configuración de Análisis")
 
-expirations = sorted(list(set(o["expiration"] for o in ggal_options if o["expiration"] is not None)))
+# Filter expirations >= today
+expirations = sorted(list(set(o["expiration"] for o in ggal_options if o["expiration"] is not None and o["expiration"] >= date.today())))
 st.session_state.selected_exp = st.sidebar.selectbox(
     "Selecciona la fecha de vencimiento",
     expirations,
@@ -40,6 +41,7 @@ st.session_state.selected_exp = st.sidebar.selectbox(
 
 st.session_state.num_contracts = st.sidebar.number_input("Número de contratos", min_value=1, value=1, step=1)
 st.session_state.commission_rate = st.sidebar.number_input("Comisión (%)", min_value=0.0, value=0.5, step=0.1) / 100
+st.sidebar.caption("Las tarifas son estimaciones; las reales pueden variar.")
 st.session_state.iv = st.sidebar.number_input("Volatilidad Implícita (%)", min_value=0.0, value=utils.DEFAULT_IV * 100, step=1.0) / 100
 strike_percentage = st.sidebar.slider("Rango de Strikes (% del precio actual)", 0.0, 100.0, 20.0) / 100
 st.session_state.plot_range_pct = st.sidebar.slider("Rango de Precios en Gráficos 3D (% del precio actual)", 10.0, 200.0, 30.0) / 100
@@ -52,5 +54,13 @@ max_strike = st.session_state.current_price * (1 + strike_percentage)
 st.session_state.filtered_calls = [o for o in ggal_options if o["type"] == "call" and o["expiration"] == st.session_state.selected_exp and min_strike <= o["strike"] <= max_strike]
 st.session_state.filtered_puts = [o for o in ggal_options if o["type"] == "put" and o["expiration"] == st.session_state.selected_exp and min_strike <= o["strike"] <= max_strike]
 st.session_state.expiration_days = max(1, (st.session_state.selected_exp - date.today()).days)
+
+# Add UI feedback for empty filters
+if not st.session_state.filtered_calls and not st.session_state.filtered_puts:
+    st.warning("No hay opciones disponibles en el rango de strikes seleccionado para esta fecha de vencimiento.")
+elif not st.session_state.filtered_calls:
+    st.warning("No hay calls disponibles en el rango de strikes seleccionado para esta fecha de vencimiento.")
+elif not st.session_state.filtered_puts:
+    st.warning("No hay puts disponibles en el rango de strikes seleccionado para esta fecha de vencimiento.")
 
 st.info("La configuración ha sido guardada. Por favor, seleccione una página de estrategia en la barra lateral.")

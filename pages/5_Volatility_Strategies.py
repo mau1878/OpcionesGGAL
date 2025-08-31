@@ -21,13 +21,18 @@ with tab1:
         st.dataframe(styled_df)
     else:
         st.dataframe(df)
-        st.warning("No data available for Long Straddle.")
+        st.warning("No hay datos disponibles para Long Straddle.")
     if not df.empty:
-        selected = st.selectbox("Selecciona una combinación para visualizar", df.index, key="straddle_select")
-        result = df.loc[selected].to_dict()
+        options = df.index
+        selected = st.selectbox("Selecciona una combinación para visualizar", options, key="straddle_select")
+        row = df.loc[selected]
+        result = row.to_dict()
         result["strikes"] = [selected] if isinstance(selected, (int, float)) else list(selected)
         result["num_contracts"] = st.session_state.num_contracts
-        utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Straddle")
+        if result:
+            utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Straddle")
+        else:
+            st.warning("Selección inválida. Por favor, seleccione una combinación válida.")
 
 with tab2:
     st.subheader("Long Strangle")
@@ -37,10 +42,15 @@ with tab2:
         st.dataframe(styled_df)
     else:
         st.dataframe(df)
-        st.warning("No data available for Long Strangle.")
+        st.warning("No hay datos disponibles para Long Strangle.")
     if not df.empty:
-        selected = st.selectbox("Selecciona una combinación para visualizar", df.index, key="strangle_select")
-        result = df.loc[selected].to_dict()
-        result["strikes"] = list(selected)
+        options = df.index
+        selected = st.selectbox("Selecciona una combinación para visualizar", options, key="strangle_select")
+        row = df.loc[selected]
+        result = row.to_dict()
+        result["strikes"] = list(selected) if isinstance(selected, tuple) else [selected]
         result["num_contracts"] = st.session_state.num_contracts
-        utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Strangle")
+        if result:
+            utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Strangle")
+        else:
+            st.warning("Selección inválida. Por favor, seleccione una combinación válida.")

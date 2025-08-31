@@ -18,50 +18,59 @@ with tab1:
     st.header("Bull Call Spread (Débito)")
     st.subheader("Análisis Detallado por Ratio")
     detailed_df_call = utils.create_spread_table(calls, utils.calculate_bull_call_spread, st.session_state.num_contracts, st.session_state.commission_rate, True)
-    st.dataframe(detailed_df_call.style.format({
-        "Net Cost": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}", "Cost-to-Profit Ratio": "{:.2%}"
-    }))
+    if not detailed_df_call.empty:
+        st.dataframe(detailed_df_call.style.format({
+            "Net Cost": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}", "Cost-to-Profit Ratio": "{:.2%}", "Breakeven": "{:.2f}"
+        }))
+    else:
+        st.dataframe(detailed_df_call)
+        st.warning("No hay datos disponibles para Bull Call Spread. Asegúrese de que hay suficientes opciones call.")
+    st.subheader("Matriz de Costo Neto (Compra en Fila, Venta en Columna)")
+    profit_df, _, _, _ = utils.create_spread_matrix(calls, utils.calculate_bull_call_spread, st.session_state.num_contracts, st.session_state.commission_rate, True)
+    if not profit_df.empty:
+        st.dataframe(profit_df.style.format("{:.2f}").background_gradient(cmap='viridis_r'))
+    else:
+        st.warning("No hay datos disponibles para la matriz de costos.")
     st.subheader("Visualización 3D")
     if not detailed_df_call.empty:
-        selected = st.selectbox("Selecciona una combinación para visualizar", detailed_df_call.index, key="bcs_select")
-        if isinstance(selected, tuple) and len(selected) == 2:
-            long_strike, short_strike = selected
-            row = detailed_df_call.loc[selected]
-            result = {
-                "net_cost": row["Net Cost"],
-                "max_profit": row["Max Profit"],
-                "max_loss": row["Max Loss"],
-                "strikes": [long_strike, short_strike],
-                "num_contracts": st.session_state.num_contracts
-            }
-            if result:
-                utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Bull Call Spread")
+        options = detailed_df_call.index
+        selected = st.selectbox("Selecciona una combinación para visualizar", options, key="bcs_select")
+        row = detailed_df_call.loc[selected]
+        result = row.to_dict()
+        result["strikes"] = list(selected) if isinstance(selected, tuple) else [selected]
+        result["num_contracts"] = st.session_state.num_contracts
+        if result:
+            utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Bull Call Spread")
         else:
             st.warning("Selección inválida. Por favor, seleccione una combinación válida.")
-
 
 with tab2:
     st.header("Bull Put Spread (Crédito)")
     st.subheader("Análisis Detallado por Ratio")
-    # --- FIX: Changed the last parameter from True to False ---
     detailed_df_put = utils.create_spread_table(puts, utils.calculate_bull_put_spread, st.session_state.num_contracts, st.session_state.commission_rate, False)
-    st.dataframe(detailed_df_put.style.format({
-        "Net Credit": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}", "Cost-to-Profit Ratio": "{:.2%}"
-    }))
+    if not detailed_df_put.empty:
+        st.dataframe(detailed_df_put.style.format({
+            "Net Credit": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}", "Cost-to-Profit Ratio": "{:.2%}", "Breakeven": "{:.2f}"
+        }))
+    else:
+        st.dataframe(detailed_df_put)
+        st.warning("No hay datos disponibles para Bull Put Spread. Asegúrese de que hay suficientes opciones put.")
+    st.subheader("Matriz de Crédito Neto (Venta en Fila, Compra en Columna)")
+    profit_df, _, _, _ = utils.create_spread_matrix(puts, utils.calculate_bull_put_spread, st.session_state.num_contracts, st.session_state.commission_rate, False)
+    if not profit_df.empty:
+        st.dataframe(profit_df.style.format("{:.2f}").background_gradient(cmap='viridis'))
+    else:
+        st.warning("No hay datos disponibles para la matriz de créditos.")
     st.subheader("Visualización 3D")
     if not detailed_df_put.empty:
-        selected = st.selectbox("Selecciona una combinación para visualizar", detailed_df_put.index, key="bps_select")
-        if isinstance(selected, tuple) and len(selected) == 2:
-            long_strike, short_strike = selected
-            row = detailed_df_put.loc[selected]
-            result = {
-                "net_cost": -row["Net Credit"],
-                "max_profit": row["Max Profit"],
-                "max_loss": row["Max Loss"],
-                "strikes": [long_strike, short_strike],
-                "num_contracts": st.session_state.num_contracts
-            }
-            if result:
-                utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Bull Put Spread")
+        options = detailed_df_put.index
+        selected = st.selectbox("Selecciona una combinación para visualizar", options, key="bps_select")
+        row = detailed_df_put.loc[selected]
+        result = row.to_dict()
+        result["strikes"] = list(selected) if isinstance(selected, tuple) else [selected]
+        result["num_contracts"] = st.session_state.num_contracts
+        result["net_cost"] = -result.get("Net Credit", 0)
+        if result:
+            utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Bull Put Spread")
         else:
             st.warning("Selección inválida. Por favor, seleccione una combinación válida.")
