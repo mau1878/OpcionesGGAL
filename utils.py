@@ -119,57 +119,56 @@ def calculate_fees(base_cost: float, commission_rate: float) -> tuple[float, flo
     vat = (commission + market_fees) * 0.21
     return commission, market_fees, vat
 
+
+# REPLACE this function in utils.py
 def calculate_bull_call_spread(long_opt, short_opt, num_contracts, commission_rate):
     if long_opt["strike"] >= short_opt["strike"]:
         return None
     long_price = get_strategy_price(long_opt, "buy")
     short_price = get_strategy_price(short_opt, "sell")
-    if long_price is None or short_price is None:
+    if any(p is None for p in [long_price, short_price]):
         return None
-    base_cost = long_price * num_contracts * 100
-    commission, market_fees, vat = calculate_fees(base_cost, commission_rate)
-    net_cost = (long_price - short_price) * num_contracts * 100 + commission + market_fees + vat
-    if net_cost <= 0:
-        return None
-    max_profit = (short_opt["strike"] - long_opt["strike"]) * num_contracts * 100 - net_cost
-    max_loss = net_cost
-    breakeven = long_opt["strike"] + (net_cost / (num_contracts * 100))
-    return {
-        "max_profit": max(0, max_profit),
-        "net_cost": net_cost,
-        "max_loss": max_loss,
-        "breakeven": breakeven,
-        "long_strike": long_opt["strike"],
-        "short_strike": short_opt["strike"],
-        "strikes": [long_opt["strike"], short_opt["strike"]]
-    } if max_profit > 0 else None
 
-def calculate_bull_put_spread(long_opt, short_opt, num_contracts, commission_rate):
-    if long_opt["strike"] >= short_opt["strike"]:
-        return None
-    long_price = get_strategy_price(long_opt, "buy")
-    short_price = get_strategy_price(short_opt, "sell")
-    if long_price is None or short_price is None:
-        return None
-    base_cost = long_price * num_contracts * 100
+    base_cost = (long_price - short_price) * num_contracts * 100
     commission, market_fees, vat = calculate_fees(base_cost, commission_rate)
-    net_cost = (long_price - short_price) * num_contracts * 100 + commission + market_fees + vat
-    if net_cost >= 0:
-        return None
-    max_profit = -net_cost
-    max_loss = (short_opt["strike"] - long_opt["strike"]) * num_contracts * 100 + net_cost
-    breakeven = short_opt["strike"] + (net_cost / (num_contracts * 100))
+    net_cost = base_cost + commission + market_fees + vat
+
+    max_loss = net_cost
+    max_profit = (short_opt["strike"] - long_opt["strike"]) * num_contracts * 100 - net_cost
+
     return {
-        "max_profit": max_profit,
         "net_cost": net_cost,
+        "max_profit": max_profit,
         "max_loss": max_loss,
-        "breakeven": breakeven,
-        "long_strike": long_opt["strike"],
-        "short_strike": short_opt["strike"],
         "strikes": [long_opt["strike"], short_opt["strike"]]
     }
 
 
+# REPLACE this function in utils.py
+def calculate_bull_put_spread(short_opt, long_opt, num_contracts, commission_rate):
+    if short_opt["strike"] >= long_opt["strike"]:
+        return None
+    short_price = get_strategy_price(short_opt, "sell")
+    long_price = get_strategy_price(long_opt, "buy")
+    if any(p is None for p in [short_price, long_price]):
+        return None
+
+    base_credit = (short_price - long_price) * num_contracts * 100
+    commission, market_fees, vat = calculate_fees(abs(base_credit), commission_rate)
+    net_credit = base_credit - (commission + market_fees + vat)
+
+    max_profit = net_credit
+    max_loss = (long_opt["strike"] - short_opt["strike"]) * num_contracts * 100 - max_profit
+
+    return {
+        "net_cost": -net_credit,
+        "max_profit": max_profit,
+        "max_loss": max_loss,
+        "strikes": [short_opt["strike"], long_opt["strike"]]
+    }
+
+
+# REPLACE this function in utils.py
 def calculate_bear_call_spread(short_opt, long_opt, num_contracts, commission_rate):
     if short_opt["strike"] >= long_opt["strike"]:
         return None
@@ -182,13 +181,11 @@ def calculate_bear_call_spread(short_opt, long_opt, num_contracts, commission_ra
     commission, market_fees, vat = calculate_fees(abs(base_credit), commission_rate)
     net_credit = base_credit - (commission + market_fees + vat)
 
-    if net_credit <= 0: return None
-
     max_profit = net_credit
     max_loss = (long_opt["strike"] - short_opt["strike"]) * num_contracts * 100 - max_profit
 
     return {
-        "net_cost": -net_credit,  # Store as negative for consistency
+        "net_cost": -net_credit,
         "max_profit": max_profit,
         "max_loss": max_loss,
         "strikes": [short_opt["strike"], long_opt["strike"]]
@@ -208,14 +205,12 @@ def calculate_bear_put_spread(long_opt, short_opt, num_contracts, commission_rat
     commission, market_fees, vat = calculate_fees(base_cost, commission_rate)
     net_cost = base_cost + commission + market_fees + vat
 
-    if net_cost <= 0: return None
-
     max_loss = net_cost
     max_profit = (long_opt["strike"] - short_opt["strike"]) * num_contracts * 100 - net_cost
 
     return {
         "net_cost": net_cost,
-        "max_profit": max(0, max_profit),
+        "max_profit": max_profit,
         "max_loss": max_loss,
         "strikes": [long_opt["strike"], short_opt["strike"]]
     }
@@ -501,31 +496,33 @@ def create_spread_table(options: list, strategy_func, num_contracts: int, commis
     cost_label = "Net Cost" if is_debit else "Net Credit"
 
     for combo in combos:
-        opt1, opt2 = combo[0], combo[1]  # opt1.strike < opt2.strike
+        opt1, opt2 = combo[0], combo[1]
 
-        # --- FIX: Handle argument order for different strategies ---
-        # Bear Put Spread is the exception: it expects (high_strike_opt, low_strike_opt)
-        if "bear_put" in strategy_func.__name__:
+        func_name = strategy_func.__name__
+        result = None
+        strike_label = ""
+
+        if "bear_put" in func_name:
             result = strategy_func(opt2, opt1, num_contracts, commission_rate)
             strike_label = f"{opt2['strike']:.2f} - {opt1['strike']:.2f}"
         else:
             result = strategy_func(opt1, opt2, num_contracts, commission_rate)
             strike_label = f"{opt1['strike']:.2f} - {opt2['strike']:.2f}"
 
-        if result and result.get("max_profit", 0) > 0:
+        if result:
             cost_value = result.get("net_cost")
-            if cost_value is None: continue
+            max_profit = result.get("max_profit")
+            if cost_value is None or max_profit is None: continue
 
             ratio_cost = abs(cost_value)
-            ratio = ratio_cost / result["max_profit"] if result["max_profit"] > 0 else float('inf')
+            ratio = ratio_cost / max_profit if max_profit > 0 else float('inf')
 
-            # For credit spreads, the table should show the positive credit amount
             display_cost = -cost_value if not is_debit else cost_value
 
             entry = {
                 "Strikes": strike_label,
                 cost_label: display_cost,
-                "Max Profit": result["max_profit"],
+                "Max Profit": max_profit,
                 "Max Loss": result["max_loss"],
                 "Cost-to-Profit Ratio": ratio,
                 "strikes": result["strikes"]

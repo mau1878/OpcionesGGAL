@@ -32,14 +32,14 @@ with tab1:
     st.subheader("Visualización 3D")
     strike_prices = sorted([opt['strike'] for opt in calls])
     col1, col2 = st.columns(2)
-    long_strike = col1.selectbox("Strike de Compra (Long)", strike_prices, key="becs_long")
-    short_strike = col2.selectbox("Strike de Venta (Short)", strike_prices, key="becs_short")
+    short_strike_val = col1.selectbox("Strike de Venta (Short)", strike_prices, key="becs_short")
+    long_strike_val = col2.selectbox("Strike de Compra (Long)", strike_prices, key="becs_long")
 
-    if long_strike and short_strike and short_strike < long_strike:
-        long_opt = next((opt for opt in calls if opt['strike'] == long_strike), None)
-        short_opt = next((opt for opt in calls if opt['strike'] == short_strike), None)
+    if long_strike_val and short_strike_val and short_strike_val < long_strike_val:
+        long_opt = next((opt for opt in calls if opt['strike'] == long_strike_val), None)
+        short_opt = next((opt for opt in calls if opt['strike'] == short_strike_val), None)
         if long_opt and short_opt:
-            result = utils.calculate_bear_call_spread(long_opt, short_opt, st.session_state.num_contracts, st.session_state.commission_rate)
+            result = utils.calculate_bear_call_spread(short_opt, long_opt, st.session_state.num_contracts, st.session_state.commission_rate)
             if result:
                 utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Bear Call Spread")
 
@@ -59,12 +59,12 @@ with tab2:
     st.subheader("Visualización 3D")
     strike_prices = sorted([opt['strike'] for opt in puts])
     col1, col2 = st.columns(2)
-    long_strike = col1.selectbox("Strike de Compra (Long)", strike_prices, key="beps_long")
-    short_strike = col2.selectbox("Strike de Venta (Short)", strike_prices, key="beps_short")
+    long_strike_val = col1.selectbox("Strike de Compra (Long)", strike_prices, key="beps_long")
+    short_strike_val = col2.selectbox("Strike de Venta (Short)", strike_prices, key="beps_short")
 
-    if long_strike and short_strike and short_strike < long_strike:
-        long_opt = next((opt for opt in puts if opt['strike'] == long_strike), None)
-        short_opt = next((opt for opt in puts if opt['strike'] == short_strike), None)
+    if long_strike_val and short_strike_val and short_strike_val < long_strike_val:
+        long_opt = next((opt for opt in puts if opt['strike'] == long_strike_val), None)
+        short_opt = next((opt for opt in puts if opt['strike'] == short_strike_val), None)
         if long_opt and short_opt:
             result = utils.calculate_bear_put_spread(long_opt, short_opt, st.session_state.num_contracts, st.session_state.commission_rate)
             if result:
