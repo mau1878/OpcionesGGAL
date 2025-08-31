@@ -112,7 +112,7 @@ def calculate_bull_call_spread(long_opt, short_opt, num_contracts, commission_ra
     
     max_loss = net_cost
     max_profit = (short_opt["strike"] - long_opt["strike"]) * num_contracts * 100 - net_cost
-    return {"net_cost": net_cost, "max_profit": max_profit, "max_loss": max_loss, "strikes": [long_opt["strike"], short_opt["strike"]]}
+    return {"net_cost": net_cost, "max_profit": max_profit, "max_loss": max_loss, "strikes": [long_opt["strike"], short_opt["strike"]],"num_contracts": num_contracts}
 
 
 def calculate_bull_put_spread(short_opt, long_opt, num_contracts, commission_rate):
@@ -145,7 +145,7 @@ def calculate_bull_put_spread(short_opt, long_opt, num_contracts, commission_rat
         "net_cost": -net_credit,  # Stored as negative cost
         "max_profit": max_profit,
         "max_loss": max_loss,
-        "strikes": [long_opt["strike"], short_opt["strike"]]  # Convention: long, short
+        "strikes": [long_opt["strike"], short_opt["strike"]],"num_contracts": num_contracts  # Convention: long, short
     }
 
 
@@ -162,7 +162,7 @@ def calculate_bear_call_spread(short_opt, long_opt, num_contracts, commission_ra
     max_profit = net_credit
     max_loss = (long_opt["strike"] - short_opt["strike"]) * num_contracts * 100 - max_profit
     return {"net_cost": -net_credit, "max_profit": max_profit, "max_loss": max_loss,
-            "strikes": [short_opt["strike"], long_opt["strike"]]}
+            "strikes": [short_opt["strike"], long_opt["strike"]],"num_contracts": num_contracts}
 
 
 def calculate_bear_put_spread(long_opt, short_opt, num_contracts, commission_rate):
@@ -178,7 +178,7 @@ def calculate_bear_put_spread(long_opt, short_opt, num_contracts, commission_rat
     
     max_loss = net_cost
     max_profit = (long_opt["strike"] - short_opt["strike"]) * num_contracts * 100 - net_cost
-    return {"net_cost": net_cost, "max_profit": max_profit, "max_loss": max_loss, "strikes": [long_opt["strike"], short_opt["strike"]]}
+    return {"net_cost": net_cost, "max_profit": max_profit, "max_loss": max_loss, "strikes": [long_opt["strike"], short_opt["strike"]],"num_contracts": num_contracts}
 
 
 # --- OTHER STRATEGY CALCULATIONS ---
@@ -204,7 +204,7 @@ def calculate_call_butterfly(low_opt, mid_opt, high_opt, num_contracts, commissi
     max_profit = (mid_opt["strike"] - low_opt["strike"]) * abs(ratios[0]) * 100 - net_cost
     return {"max_profit": max_profit, "net_cost": net_cost, "max_loss": net_cost,
             "contracts": f"{ratios[0]} : {ratios[1]} : {ratios[2]}",
-            "strikes": [low_opt["strike"], mid_opt["strike"], high_opt["strike"]], "contract_ratios": ratios}
+            "strikes": [low_opt["strike"], mid_opt["strike"], high_opt["strike"]], "contract_ratios": ratios,"num_contracts": num_contracts}
 
 
 def calculate_put_butterfly(low_opt, mid_opt, high_opt, num_contracts, commission_rate):
@@ -234,7 +234,7 @@ def calculate_call_condor(k1_opt, k2_opt, k3_opt, k4_opt, num_contracts, commiss
     return {"max_profit": max_profit, "net_cost": net_cost, "max_loss": net_cost,
             "contracts": f"{ratios[0]} : {ratios[1]} : {ratios[2]} : {ratios[3]}",
             "strikes": [k1_opt["strike"], k2_opt["strike"], k3_opt["strike"], k4_opt["strike"]],
-            "contract_ratios": ratios}
+            "contract_ratios": ratios,"num_contracts": num_contracts}
 
 
 def calculate_put_condor(k1_opt, k2_opt, k3_opt, k4_opt, num_contracts, commission_rate):
@@ -249,7 +249,7 @@ def calculate_straddle(call_opt, put_opt, num_contracts, commission_rate):
 
     base_cost = sum(prices) * num_contracts * 100
     net_cost = base_cost + calculate_fees(base_cost, commission_rate)
-    return {"net_cost": net_cost, "max_loss": net_cost, "max_profit": float('inf'), "strikes": [call_opt["strike"]]}
+    return {"net_cost": net_cost, "max_loss": net_cost, "max_profit": float('inf'), "strikes": [call_opt["strike"]],"num_contracts": num_contracts}
 
 
 def calculate_strangle(put_opt, call_opt, num_contracts, commission_rate):
@@ -260,7 +260,7 @@ def calculate_strangle(put_opt, call_opt, num_contracts, commission_rate):
     base_cost = sum(prices) * num_contracts * 100
     net_cost = base_cost + calculate_fees(base_cost, commission_rate)
     return {"net_cost": net_cost, "max_loss": net_cost, "max_profit": float('inf'),
-            "strikes": [put_opt["strike"], call_opt["strike"]]}
+            "strikes": [put_opt["strike"], call_opt["strike"]],"num_contracts": num_contracts}
 
 
 # --- TABLE CREATION ---
@@ -302,7 +302,7 @@ def create_spread_table(options: list, strategy_func, num_contracts: int, commis
                 display_cost = -cost  # Show credit as a positive number
 
             data.append({
-                "Strikes": strike_label, cost_label: display_cost, "Max Profit": profit,
+                "strikes": strike_label, cost_label: display_cost, "Max Profit": profit,
                 "Max Loss": loss, "Cost-to-Profit Ratio": ratio, "strikes": result["strikes"]
             })
 
@@ -325,7 +325,7 @@ def create_complex_strategy_table(options: list, strategy_func, num_contracts: i
             if any(v is None for v in [cost, profit, loss]): continue
             ratio = cost / profit if profit > 0 else float('inf')
             data.append({
-                "Strikes": " - ".join(f"{opt['strike']:.2f}" for opt in combo), "Net Cost": cost,
+                "strikes": " - ".join(f"{opt['strike']:.2f}" for opt in combo), "Net Cost": cost,
                 "Max Profit": profit, "Max Loss": loss, "Cost-to-Profit Ratio": ratio,
                 "Contracts": result.get("contracts", "N/A"), "strikes": result["strikes"],
                 "contract_ratios": result.get("contract_ratios")
@@ -375,7 +375,7 @@ def create_vol_strategy_table(calls, puts, calc_func, num_contracts, commission_
     df = pd.DataFrame(data)
     if not df.empty:
         df = df[['strikes', 'net_cost', 'max_loss', 'max_profit', 'lower_breakeven', 'upper_breakeven']]
-        df.columns = ['Strikes', 'Net Cost', 'Max Loss', 'Max Profit', 'Lower Breakeven', 'Upper Breakeven']
+        df.columns = ['strikes', 'Net Cost', 'Max Loss', 'Max Profit', 'Lower Breakeven', 'Upper Breakeven']
     return df
 
 
@@ -442,13 +442,11 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
     from scipy.optimize import minimize_scalar
     import numpy as np
 
-    if not strategy_result or "Strikes" not in strategy_result:
+    if not strategy_result or "strikes" not in strategy_result:
         st.warning("No valid strategy selected for visualization.")
         return
 
-    net_debit = strategy_result.get("Net Cost", 0)
-    net_credit = strategy_result.get("net_credit", 0)
-    net_entry = net_debit - net_credit
+    net_entry = strategy_result.get("net_cost", 0)
     if net_entry is None: return
 
     num_contracts = strategy_result.get("num_contracts", 1)
@@ -462,6 +460,10 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
             sigma = float(sigma)
         except (TypeError, ValueError):
             return 0.0
+        if S <= 0:
+            return 0 if option_type == "call" else max(K - S, 0)
+        if K <= 0:
+            return max(S - K, 0) if option_type == "call" else 0
         if T <= 1e-9 or sigma <= 1e-9:
             return max(0, S - K) if option_type == "call" else max(0, K - S)
         with np.errstate(divide='ignore', invalid='ignore'):
@@ -491,26 +493,26 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
             elif "bear call" in strategy_key:  # Short Call Spread
                 position_value = (black_scholes(price, k2, T, r, sigma, "call") - black_scholes(price, k1, T, r, sigma, "call"))
             elif "bear put" in strategy_key:  # Long Put Spread
-                position_value = (black_scholes(price, k2, T, r, sigma, "put") - black_scholes(price, k1, T, r, sigma, "put"))
+                position_value = (black_scholes(price, k1, T, r, sigma, "put") - black_scholes(price, k2, T, r, sigma, "put"))
 
             position_value *= 100 * num_contracts
 
         elif "butterfly" in strategy_key or "condor" in strategy_key:
             ratios = strategy_result.get("contract_ratios")
-            strikes = strategy_result.get("Strikes")
+            strikes = strategy_result.get("strikes")
             opt_type = "call" if "call" in strategy_key else "put"
             if ratios and strikes:
                 vals = [black_scholes(price, k, T, r, sigma, opt_type) for k in strikes]
-                position_value = sum(r * v for r, v in zip(ratios, vals)) * 100
+                position_value = sum(r * v for r, v in zip(ratios, vals)) * 100 * num_contracts
 
         elif "straddle" in strategy_key:
-            k = strategy_result["Strikes"][0]
+            k = strategy_result["strikes"][0]
             call_val = black_scholes(price, k, T, r, sigma, "call")
             put_val = black_scholes(price, k, T, r, sigma, "put")
             position_value = (call_val + put_val) * 100 * num_contracts
 
         elif "strangle" in strategy_key:
-            put_k, call_k = strategy_result["Strikes"]
+            put_k, call_k = strategy_result["strikes"]
             call_val = black_scholes(price, call_k, T, r, sigma, "call")
             put_val = black_scholes(price, put_k, T, r, sigma, "put")
             position_value = (call_val + put_val) * 100 * num_contracts
@@ -522,11 +524,11 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
     r = st.session_state.get("risk_free_rate", 0.50)
     def objective(sigma):
         if sigma <= 0: return float('inf')
-        return strategy_value(current_price, expiration_days / 365.0, sigma) - net_entry
+        return abs(strategy_value(current_price, expiration_days / 365.0, sigma) - net_entry)
 
     try:
         from scipy.optimize import minimize_scalar
-        result = minimize_scalar(lambda sigma: abs(objective(sigma)), bounds=(0.01, 10.0), method='bounded')
+        result = minimize_scalar(objective, bounds=(0.01, 10.0), method='bounded')
         calibrated_iv = result.x
         if calibrated_iv > 0 and not np.isnan(calibrated_iv) and result.success:
             iv = calibrated_iv
@@ -551,8 +553,6 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
             T = (expiration_days - Y[i, j]) / 365.0
             T = max(T, 1e-9)  # Ensure T is always positive to avoid division by zero
             Z[i, j] = (strategy_value(price, T, iv) - net_entry) / scale_factor  # Scale values
-
-    net_entry_scaled = net_entry / scale_factor
 
     # Plotting with plotly
     import plotly.graph_objects as go

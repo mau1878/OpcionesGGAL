@@ -21,21 +21,20 @@ with tab1:
     st.dataframe(detailed_df_call.style.format({
         "Net Cost": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}", "Cost-to-Profit Ratio": "{:.2%}"
     }))
-
     st.subheader("Visualización 3D")
     if not detailed_df_call.empty:
-        strike_prices = sorted([opt['strike'] for opt in calls])
-        col1, col2 = st.columns(2)
-        long_strike_val = col1.selectbox("Strike de Compra (Long)", strike_prices, key="bcs_long")
-        short_strike_val = col2.selectbox("Strike de Venta (Short)", strike_prices, key="bcs_short")
+        selected = st.selectbox("Selecciona una combinación para visualizar", detailed_df_call.index, key="bcs_select")
+        row = detailed_df_call.loc[selected]
+        result = {
+            "net_cost": row["Net Cost"],
+            "max_profit": row["Max Profit"],
+            "max_loss": row["Max Loss"],
+            "strikes": [row["Long Strike"], row["Short Strike"]],
+            "num_contracts": st.session_state.num_contracts
+        }
+        if result:
+            utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Bull Call Spread")
 
-        if long_strike_val and short_strike_val and long_strike_val < short_strike_val:
-            long_opt = next((opt for opt in calls if opt['strike'] == long_strike_val), None)
-            short_opt = next((opt for opt in calls if opt['strike'] == short_strike_val), None)
-            if long_opt and short_opt:
-                result = utils.calculate_bull_call_spread(long_opt, short_opt, st.session_state.num_contracts, st.session_state.commission_rate)
-                if result:
-                    utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Bull Call Spread")
 
 with tab2:
     st.header("Bull Put Spread (Crédito)")
@@ -45,18 +44,16 @@ with tab2:
     st.dataframe(detailed_df_put.style.format({
         "Net Credit": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}", "Cost-to-Profit Ratio": "{:.2%}"
     }))
-
     st.subheader("Visualización 3D")
     if not detailed_df_put.empty:
-        strike_prices = sorted([opt['strike'] for opt in puts])
-        col1, col2 = st.columns(2)
-        long_strike_val = col1.selectbox("Strike de Compra (Long)", strike_prices, key="bps_long")
-        short_strike_val = col2.selectbox("Strike de Venta (Short)", strike_prices, key="bps_short")
-
-        if long_strike_val and short_strike_val and long_strike_val < short_strike_val:
-            long_opt = next((opt for opt in puts if opt['strike'] == long_strike_val), None)
-            short_opt = next((opt for opt in puts if opt['strike'] == short_strike_val), None)
-            if long_opt and short_opt:
-                result = utils.calculate_bull_put_spread(short_opt, long_opt, st.session_state.num_contracts, st.session_state.commission_rate)
-                if result:
-                    utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Bull Put Spread")
+        selected = st.selectbox("Selecciona una combinación para visualizar", detailed_df_put.index, key="bps_select")
+        row = detailed_df_put.loc[selected]
+        result = {
+            "net_cost": -row["Net Credit"],
+            "max_profit": row["Max Profit"],
+            "max_loss": row["Max Loss"],
+            "strikes": [row["Long Strike"], row["Short Strike"]],
+            "num_contracts": st.session_state.num_contracts
+        }
+        if result:
+            utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Bull Put Spread")
