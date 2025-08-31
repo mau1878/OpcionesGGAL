@@ -495,6 +495,7 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
             elif "bear put" in strategy_key:  # Long Put Spread
                 position_value = (black_scholes(price, k1, T, r, sigma, "put") - black_scholes(price, k2, T, r, sigma, "put"))
 
+
             position_value *= 100 * num_contracts
 
         elif "butterfly" in strategy_key or "condor" in strategy_key:

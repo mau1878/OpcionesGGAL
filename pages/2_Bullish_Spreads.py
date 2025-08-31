@@ -29,7 +29,7 @@ with tab1:
             "net_cost": row["Net Cost"],
             "max_profit": row["Max Profit"],
             "max_loss": row["Max Loss"],
-            "strikes": [row["Long Strike"], row["Short Strike"]],
+            "strikes": list(selected),
             "num_contracts": st.session_state.num_contracts
         }
         if result:
@@ -52,7 +52,7 @@ with tab2:
             "net_cost": -row["Net Credit"],
             "max_profit": row["Max Profit"],
             "max_loss": row["Max Loss"],
-            "strikes": [row["Long Strike"], row["Short Strike"]],
+            "strikes": list(selected),
             "num_contracts": st.session_state.num_contracts
         }
         if result:
