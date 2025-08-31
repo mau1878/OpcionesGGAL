@@ -517,6 +517,8 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
 
     # Now compute the grid with calibrated IV
     plot_range_pct = st.session_state.get("plot_range_pct", 0.3)
+    scale_factor = 1e9  # Scale down large payoff values for visualization
+
     prices = np.linspace(max(0.1, current_price * (1 - plot_range_pct)), current_price * (1 + plot_range_pct), 50)
     times = np.linspace(0, expiration_days, 20)
     X, Y = np.meshgrid(prices, times)
@@ -526,7 +528,7 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
         for j in range(len(prices)):
             price = X[i, j]
             T = (expiration_days - Y[i, j]) / 365.0
-            Z[i, j] = strategy_value(price, T, iv) - net_entry  # Subtract net_entry to show profit/loss relative to breakeven
+            Z[i, j] = (strategy_value(price, T, iv) - net_entry) / scale_factor  # Scale values for visualization
 
     # Force Z range to include 0 with margin
     z_min = min(Z.min(), 0)
