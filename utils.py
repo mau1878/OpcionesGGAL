@@ -10,6 +10,11 @@ import logging
 from scipy.stats import norm
 # ADD the following import to utils.py if not already present
 from scipy.optimize import minimize_scalar
+import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
+import pandas as pd
+from datetime import datetime
 
 # --- CONFIGURATION ---
 logging.basicConfig(level=logging.INFO)
@@ -38,15 +43,43 @@ EXPIRATION_MAP_2025 = {
 
 
 # --- DATA FETCHING & PARSING ---
-@st.cache_data(ttl=300)
-def fetch_data(url: str) -> list:
+def fetch_stock_data(url="https://data912.com/live/arg_stocks"):
+    session = requests.Session()
+    retry_strategy = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[500, 502, 503, 504]
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("https://", adapter)
     try:
-        response = requests.get(url, headers={"accept": "*/*"}, timeout=10)
+        response = session.get(url, timeout=30)  # Increased timeout to 30 seconds
         response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        st.error(f"Error fetching data from {url}: {e}")
-        return []
+        data = response.json()  # Assuming the API returns JSON; adjust if it's CSV or other format
+        if not data:
+            return None
+        # Convert to DataFrame or process as needed
+        df = pd.DataFrame(data)
+        df["timestamp"] = datetime.now()
+        return df
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching data from {url}: {e}")
+        return None
+    finally:
+        session.close()
+
+# Example usage in data loading (adjust based on your code)
+def load_ggal_data():
+    data = fetch_stock_data()
+    if data is not None:
+        st.session_state.ggal_data = data
+        st.success("Datos actualizados.")
+    else:
+        st.warning("No se pudieron cargar los datos de GGAL. Intente actualizar.")
+        if 'ggal_data' in st.session_state and st.session_state.ggal_data is not None:
+            st.info("Usando datos cached anteriores.")
+            return st.session_state.ggal_data
+    return data
 
 
 def parse_option_symbol(symbol: str) -> tuple[str | None, float | None, date | None]:
