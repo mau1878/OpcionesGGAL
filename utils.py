@@ -328,9 +328,9 @@ def create_complex_strategy_table(options, strategy_func, num_contracts, commiss
             strikes = tuple(result["strikes"])
             data.append({
                 "Strikes": strikes,
-                "Net Cost": result["net_cost"],
-                "Max Profit": result["max_profit"],
-                "Max Loss": result["max_loss"]
+                "net_cost": result["net_cost"],
+                "max_profit": result["max_profit"],
+                "max_loss": result["max_loss"]
             })
     if not data:
         return pd.DataFrame()
@@ -530,15 +530,14 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
     X, Y = np.meshgrid(prices, times)
     Z = np.zeros_like(X)
 
-
     scale_factor = 1  # Define scale_factor to avoid NameError and division by zero
+
     for i in range(len(times)):
         for j in range(len(prices)):
             price = X[i, j]
             T = (expiration_days - Y[i, j]) / 365.0
             T = max(T, 1e-9)  # Ensure T is always positive to avoid division by zero
             Z[i, j] = (strategy_value(price, T, iv) - net_entry) / scale_factor  # Scale values
-
 
     # Plotting with plotly
     import plotly.graph_objects as go
@@ -554,6 +553,5 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
         autosize=True,
         margin=dict(l=65, r=50, b=65, t=90),
     )
-
 
     st.plotly_chart(fig, use_container_width=True, key=key)
