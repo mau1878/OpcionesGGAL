@@ -526,7 +526,7 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
         for j in range(len(prices)):
             price = X[i, j]
             T = (expiration_days - Y[i, j]) / 365.0
-            Z[i, j] = strategy_value(price, T, iv)  # Removed - net_entry to keep absolute payoff
+            Z[i, j] = strategy_value(price, T, iv) - net_entry  # Subtract net_entry to show profit/loss relative to breakeven
 
     # Force Z range to include 0 with margin
     z_min = min(Z.min(), 0)
