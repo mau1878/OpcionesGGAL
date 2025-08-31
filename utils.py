@@ -335,6 +335,8 @@ def create_complex_strategy_table(options: list, strategy_func, num_contracts: i
 
 # REPLACE the entire create_vol_strategy_table function in utils.py with this version that includes breakeven points instead of the cost-to-profit ratio.
 
+# REPLACE the entire create_vol_strategy_table function in utils.py with this version that returns the DataFrame without styling.
+
 def create_vol_strategy_table(calls, puts, calc_func, num_contracts, commission_rate):
     data = []
     sorted_calls = sorted(calls, key=lambda x: x['strike'])
@@ -374,7 +376,7 @@ def create_vol_strategy_table(calls, puts, calc_func, num_contracts, commission_
     if not df.empty:
         df = df[['strikes', 'net_cost', 'max_loss', 'max_profit', 'lower_breakeven', 'upper_breakeven']]
         df.columns = ['Strikes', 'Net Cost', 'Max Loss', 'Max Profit', 'Lower Breakeven', 'Upper Breakeven']
-    return df.style.format("{:.2f}", subset=['Net Cost', 'Max Loss', 'Lower Breakeven', 'Upper Breakeven'])
+    return df
 
 
 # REPLACE the broken create_spread_matrix function with this new one.
@@ -500,12 +502,16 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
     # REPLACE the calibration part in visualize_3d_payoff function in utils.py with this improved version using minimize_scalar for |objective|.
 
     # Calibrate IV to minimize |strategy_value - net_cost| at current price and initial time
+    net_debit = strategy_result.get("net_cost", 0)
+    net_credit = strategy_result.get("net_credit", 0)
+    net_entry = net_debit - net_credit
+
+    # Calibrate IV to minimize |strategy_value - net_entry|
     def objective(sigma):
         if sigma <= 0: return float('inf')
-        return strategy_value(current_price, expiration_days / 365.0, sigma) - net_cost
+        return strategy_value(current_price, expiration_days / 365.0, sigma) - net_entry
 
     try:
-        from scipy.optimize import minimize_scalar
         result = minimize_scalar(lambda sigma: abs(objective(sigma)), bounds=(0.01, 10.0), tol=1e-5)
         calibrated_iv = result.x
         if calibrated_iv > 0 and not np.isnan(calibrated_iv) and result.success:
@@ -524,7 +530,7 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
         for j in range(len(prices)):
             price = X[i, j]
             T = (expiration_days - Y[i, j]) / 365.0
-            Z[i, j] = strategy_value(price, T, iv) - net_cost
+            Z[i, j] = position_value - net_entry
 
     # Force Z range to include 0 with margin
     z_min = min(Z.min(), 0)

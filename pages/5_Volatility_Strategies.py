@@ -16,7 +16,7 @@ tab1, tab2 = st.tabs(["Straddle", "Strangle"])
 with tab1:
     st.subheader("Long Straddle")
     df = utils.create_vol_strategy_table(calls, puts, utils.calculate_straddle, st.session_state.num_contracts, st.session_state.commission_rate)
-    st.dataframe(df)
+    st.dataframe(df.style.format("{:.2f}", subset=['Net Cost', 'Max Loss', 'Lower Breakeven', 'Upper Breakeven']))
     if not df.empty:
         selected = st.selectbox("Selecciona una combinación para visualizar", df.index, key="straddle_select")
         result = df.loc[selected].to_dict()
@@ -25,7 +25,7 @@ with tab1:
 with tab2:
     st.subheader("Long Strangle")
     df = utils.create_vol_strategy_table(calls, puts, utils.calculate_strangle, st.session_state.num_contracts, st.session_state.commission_rate)
-    st.dataframe(df)
+    st.dataframe(df.style.format("{:.2f}", subset=['Net Cost', 'Max Loss', 'Lower Breakeven', 'Upper Breakeven']))
     if not df.empty:
         selected = st.selectbox("Selecciona una combinación para visualizar", df.index, key="strangle_select")
         result = df.loc[selected].to_dict()
