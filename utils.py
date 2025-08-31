@@ -353,8 +353,48 @@ def create_vol_strategy_table(calls: list, puts: list, strategy_func, num_contra
     return pd.DataFrame(data)
 
 
-def create_spread_matrix(*args, **kwargs):  # This function is kept for compatibility but can be removed if not used.
-    return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+# REPLACE the broken create_spread_matrix function with this new one.
+
+def create_spread_matrix(options: list, strategy_func, num_contracts: int, commission_rate: float, is_debit: bool) -> tuple:
+    """
+    Creates a matrix of net cost or net credit for a given spread strategy.
+    Rows and columns represent the strikes of the two legs of the spread.
+    """
+    strikes = sorted(options, key=lambda x: x["strike"])
+    strike_labels = [f"{s['strike']:.2f}" for s in strikes]
+    
+    matrix_data = np.full((len(strikes), len(strikes)), np.nan)
+    func_name = strategy_func.__name__
+
+    for i, row_opt in enumerate(strikes):
+        for j, col_opt in enumerate(strikes):
+            result = None
+            
+            # The logic here maps the row/column to the correct leg (long/short)
+            # based on the strategy and the convention (e.g., "Buy on Row, Sell on Col").
+            if "bull_call" in func_name and row_opt["strike"] < col_opt["strike"]:
+                # Buy low (row), Sell high (col)
+                result = strategy_func(long_opt=row_opt, short_opt=col_opt, num_contracts=num_contracts, commission_rate=commission_rate)
+            elif "bull_put" in func_name and row_opt["strike"] > col_opt["strike"]:
+                # Sell high (row), Buy low (col)
+                result = strategy_func(short_opt=row_opt, long_opt=col_opt, num_contracts=num_contracts, commission_rate=commission_rate)
+            elif "bear_call" in func_name and row_opt["strike"] < col_opt["strike"]:
+                # Sell low (row), Buy high (col)
+                result = strategy_func(short_opt=row_opt, long_opt=col_opt, num_contracts=num_contracts, commission_rate=commission_rate)
+            elif "bear_put" in func_name and row_opt["strike"] > col_opt["strike"]:
+                # Buy high (row), Sell low (col)
+                result = strategy_func(long_opt=row_opt, short_opt=col_opt, num_contracts=num_contracts, commission_rate=commission_rate)
+
+            if result and "net_cost" in result and result["net_cost"] is not None:
+                cost = result["net_cost"]
+                # For credit spreads (is_debit=False), display the credit as a positive number.
+                # For debit spreads (is_debit=True), display the cost as a positive number.
+                matrix_data[i, j] = -cost if not is_debit else cost
+
+    df = pd.DataFrame(matrix_data, index=strike_labels, columns=strike_labels)
+    
+    # Return a tuple of 4 for compatibility with the page code that unpacks it.
+    return df, pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 
 # --- 3D VISUALIZATION ---
