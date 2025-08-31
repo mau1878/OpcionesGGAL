@@ -104,13 +104,13 @@ def calculate_bull_call_spread(long_opt, short_opt, num_contracts, commission_ra
     if any(p is None for p in [long_price, short_price]): return None
 
     base_cost = (long_price - short_price) * num_contracts * 100
-    total_fees = calculate_fees(base_cost) if base_cost > 0 else 0
+    # --- FIX: Added the missing commission_rate parameter ---
+    total_fees = calculate_fees(base_cost, commission_rate) if base_cost > 0 else 0
     net_cost = base_cost + total_fees
-
+    
     max_loss = net_cost
     max_profit = (short_opt["strike"] - long_opt["strike"]) * num_contracts * 100 - net_cost
-    return {"net_cost": net_cost, "max_profit": max_profit, "max_loss": max_loss,
-            "strikes": [long_opt["strike"], short_opt["strike"]]}
+    return {"net_cost": net_cost, "max_profit": max_profit, "max_loss": max_loss, "strikes": [long_opt["strike"], short_opt["strike"]]}
 
 
 def calculate_bull_put_spread(short_opt, long_opt, num_contracts, commission_rate):
@@ -152,13 +152,13 @@ def calculate_bear_put_spread(long_opt, short_opt, num_contracts, commission_rat
     if any(p is None for p in [long_price, short_price]): return None
 
     base_cost = (long_price - short_price) * num_contracts * 100
-    total_fees = calculate_fees(base_cost) if base_cost > 0 else 0
+    # --- FIX: Added the missing commission_rate parameter ---
+    total_fees = calculate_fees(base_cost, commission_rate) if base_cost > 0 else 0
     net_cost = base_cost + total_fees
-
+    
     max_loss = net_cost
     max_profit = (long_opt["strike"] - short_opt["strike"]) * num_contracts * 100 - net_cost
-    return {"net_cost": net_cost, "max_profit": max_profit, "max_loss": max_loss,
-            "strikes": [long_opt["strike"], short_opt["strike"]]}
+    return {"net_cost": net_cost, "max_profit": max_profit, "max_loss": max_loss, "strikes": [long_opt["strike"], short_opt["strike"]]}
 
 
 # --- OTHER STRATEGY CALCULATIONS ---
