@@ -480,20 +480,20 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
 
         elif "butterfly" in strategy_key or "condor" in strategy_key:
             ratios = strategy_result.get("contract_ratios")
-            strikes = strategy_result.get("strikes")
+            strikes = strategy_result.get("Strikes")
             opt_type = "call" if "call" in strategy_key else "put"
             if ratios and strikes:
                 vals = [black_scholes(price, k, T, r, sigma, opt_type) for k in strikes]
                 position_value = sum(r * v for r, v in zip(ratios, vals)) * 100
 
         elif "straddle" in strategy_key:
-            k = strategy_result["strikes"][0]
+            k = strategy_result["Strikes"][0]
             call_val = black_scholes(price, k, T, r, sigma, "call")
             put_val = black_scholes(price, k, T, r, sigma, "put")
             position_value = (call_val + put_val) * 100 * num_contracts
 
         elif "strangle" in strategy_key:
-            put_k, call_k = strategy_result["strikes"]
+            put_k, call_k = strategy_result["Strikes"]
             call_val = black_scholes(price, call_k, T, r, sigma, "call")
             put_val = black_scholes(price, put_k, T, r, sigma, "put")
             position_value = (call_val + put_val) * 100 * num_contracts
