@@ -184,78 +184,96 @@ def calculate_bear_put_spread(long_opt, short_opt, num_contracts, commission_rat
 # --- OTHER STRATEGY CALCULATIONS ---
 # (This section includes Butterfly, Condor, Straddle, Strangle calculations)
 def calculate_call_butterfly(low_opt, mid_opt, high_opt, num_contracts, commission_rate):
-    if not (low_opt["strike"] < mid_opt["strike"] < high_opt["strike"]): return None
-    prices = [get_strategy_price(opt, action) for opt, action in
-              zip([low_opt, mid_opt, high_opt], ["buy", "sell", "buy"])]
-    if any(p is None for p in prices): return None
-
-    gap1, gap2 = mid_opt["strike"] - low_opt["strike"], high_opt["strike"] - mid_opt["strike"]
-    if gap1 < MIN_GAP or gap2 < MIN_GAP: return None
-
-    g = gcd(int(gap1 * 100), int(gap2 * 100)) / 100
-    if g < MIN_GAP: g = MIN_GAP
-
-    ratios = [num_contracts * round(gap2 / g), -num_contracts * round((gap1 + gap2) / g),
-              num_contracts * round(gap1 / g)]
-
-    base_cost = (prices[0] * abs(ratios[0]) + prices[2] * abs(ratios[2])) * 100
-    net_cost = sum(p * r for p, r in zip(prices, ratios)) * 100 + calculate_fees(base_cost, commission_rate)
-
-    max_profit = (mid_opt["strike"] - low_opt["strike"]) * abs(ratios[0]) * 100 - net_cost
+    strikes = [low_opt["strike"], mid_opt["strike"], high_opt["strike"]]
+    if strikes[0] >= strikes[1] or strikes[1] >= strikes[2]: return None
+    low_price = get_strategy_price(low_opt, "buy")
+    mid_price = get_strategy_price(mid_opt, "sell")
+    high_price = get_strategy_price(high_opt, "buy")
+    if None in (low_price, mid_price, high_price): return None
+    base_cost = (low_price + high_price - 2 * mid_price) * 100 * num_contracts
+    fees = calculate_fees(abs(base_cost), commission_rate)
+    net_cost = base_cost + fees if base_cost > 0 else base_cost - fees
+    lower_spread = strikes[1] - strikes[0]
+    upper_spread = strikes[2] - strikes[1]
+    max_profit = min(lower_spread, upper_spread) * 100 * num_contracts - net_cost
+    max_loss = net_cost
     return {"net_cost": net_cost, "max_profit": max_profit, "max_loss": max_loss, "strikes": strikes, "contract_ratios": [1, -2, 1], "num_contracts": num_contracts}
-
 
 def calculate_put_butterfly(low_opt, mid_opt, high_opt, num_contracts, commission_rate):
-    # This function is identical to the call version, just with puts.
+    strikes = [low_opt["strike"], mid_opt["strike"], high_opt["strike"]]
+    if strikes[0] >= strikes[1] or strikes[1] >= strikes[2]: return None
+    low_price = get_strategy_price(low_opt, "buy")
+    mid_price = get_strategy_price(mid_opt, "sell")
+    high_price = get_strategy_price(high_opt, "buy")
+    if None in (low_price, mid_price, high_price): return None
+    base_cost = (low_price + high_price - 2 * mid_price) * 100 * num_contracts
+    fees = calculate_fees(abs(base_cost), commission_rate)
+    net_cost = base_cost + fees if base_cost > 0 else base_cost - fees
+    lower_spread = strikes[1] - strikes[0]
+    upper_spread = strikes[2] - strikes[1]
+    max_profit = min(lower_spread, upper_spread) * 100 * num_contracts - net_cost
+    max_loss = net_cost
     return {"net_cost": net_cost, "max_profit": max_profit, "max_loss": max_loss, "strikes": strikes, "contract_ratios": [1, -2, 1], "num_contracts": num_contracts}
 
+def calculate_call_condor(low_opt, mid1_opt, mid2_opt, high_opt, num_contracts, commission_rate):
+    strikes = [low_opt["strike"], mid1_opt["strike"], mid2_opt["strike"], high_opt["strike"]]
+    if not all(strikes[i] < strikes[i+1] for i in range(3)): return None
+    low_price = get_strategy_price(low_opt, "buy")
+    mid1_price = get_strategy_price(mid1_opt, "sell")
+    mid2_price = get_strategy_price(mid2_opt, "sell")
+    high_price = get_strategy_price(high_opt, "buy")
+    if None in (low_price, mid1_price, mid2_price, high_price): return None
+    base_cost = (low_price + high_price - mid1_price - mid2_price) * 100 * num_contracts
+    fees = calculate_fees(abs(base_cost), commission_rate)
+    net_cost = base_cost + fees if base_cost > 0 else base_cost - fees
+    spread_width = mid2_opt["strike"] - mid1_opt["strike"]
+    max_profit = spread_width * 100 * num_contracts - net_cost
+    max_loss = net_cost
+    return {"net_cost": net_cost, "max_profit": max_profit, "max_loss": max_loss, "strikes": strikes, "contract_ratios": [1, -1, -1, 1], "num_contracts": num_contracts}
 
-def calculate_call_condor(k1_opt, k2_opt, k3_opt, k4_opt, num_contracts, commission_rate):
-    if not (k1_opt["strike"] < k2_opt["strike"] < k3_opt["strike"] < k4_opt["strike"]): return None
-    prices = [get_strategy_price(opt, action) for opt, action in
-              zip([k1_opt, k2_opt, k3_opt, k4_opt], ["buy", "sell", "sell", "buy"])]
-    if any(p is None for p in prices): return None
-
-    gap1, gap3 = k2_opt["strike"] - k1_opt["strike"], k4_opt["strike"] - k3_opt["strike"]
-    if gap1 < MIN_GAP or gap3 < MIN_GAP: return None
-
-    g = gcd(int(gap1 * 100), int(gap3 * 100)) / 100
-    if g < MIN_GAP: g = MIN_GAP
-
-    ratios = [num_contracts * round(gap3 / g), -num_contracts * round(gap3 / g), -num_contracts * round(gap1 / g),
-              num_contracts * round(gap1 / g)]
-
-    base_cost = (prices[0] * abs(ratios[0]) + prices[3] * abs(ratios[3])) * 100
-    net_cost = sum(p * r for p, r in zip(prices, ratios)) * 100 + calculate_fees(base_cost, commission_rate)
-
-    max_profit = (k2_opt["strike"] - k1_opt["strike"]) * abs(ratios[0]) * 100 - net_cost
+def calculate_put_condor(low_opt, mid1_opt, mid2_opt, high_opt, num_contracts, commission_rate):
+    strikes = [low_opt["strike"], mid1_opt["strike"], mid2_opt["strike"], high_opt["strike"]]
+    if not all(strikes[i] < strikes[i+1] for i in range(3)): return None
+    low_price = get_strategy_price(low_opt, "buy")
+    mid1_price = get_strategy_price(mid1_opt, "sell")
+    mid2_price = get_strategy_price(mid2_opt, "sell")
+    high_price = get_strategy_price(high_opt, "buy")
+    if None in (low_price, mid1_price, mid2_price, high_price): return None
+    base_cost = (low_price + high_price - mid1_price - mid2_price) * 100 * num_contracts
+    fees = calculate_fees(abs(base_cost), commission_rate)
+    net_cost = base_cost + fees if base_cost > 0 else base_cost - fees
+    spread_width = mid2_opt["strike"] - mid1_opt["strike"]
+    max_profit = spread_width * 100 * num_contracts - net_cost
+    max_loss = net_cost
     return {"net_cost": net_cost, "max_profit": max_profit, "max_loss": max_loss, "strikes": strikes, "contract_ratios": [1, -1, -1, 1], "num_contracts": num_contracts}
 
 
-def calculate_put_condor(k1_opt, k2_opt, k3_opt, k4_opt, num_contracts, commission_rate):
-    # This function is identical to the call version, just with puts.
-    return {"net_cost": net_cost, "max_profit": max_profit, "max_loss": max_loss, "strikes": strikes, "contract_ratios": [1, -1, -1, 1], "num_contracts": num_contracts}
+def calculate_straddle(call, put, num_contracts, commission_rate):
+    if call["strike"] != put["strike"]: return None
+    call_price = get_strategy_price(call, "buy")
+    put_price = get_strategy_price(put, "buy")
+    if None in (call_price, put_price): return None
+    base_cost = (call_price + put_price) * 100 * num_contracts
+    fees = calculate_fees(base_cost, commission_rate)
+    net_cost = base_cost + fees
+    k = call["strike"]
+    max_loss = net_cost
+    lower_breakeven = k - net_cost / (100 * num_contracts)
+    upper_breakeven = k + net_cost / (100 * num_contracts)
+    return {"net_cost": net_cost, "max_loss": max_loss, "strikes": [k], "lower_breakeven": lower_breakeven, "upper_breakeven": upper_breakeven, "num_contracts": num_contracts}
 
-
-def calculate_straddle(call_opt, put_opt, num_contracts, commission_rate):
-    if call_opt["strike"] != put_opt["strike"]: return None
-    prices = [get_strategy_price(call_opt, "buy"), get_strategy_price(put_opt, "buy")]
-    if any(p is None for p in prices): return None
-
-    base_cost = sum(prices) * num_contracts * 100
-    net_cost = base_cost + calculate_fees(base_cost, commission_rate)
-    return {"net_cost": net_cost, "max_loss": net_cost, "max_profit": float('inf'), "strikes": [call_opt["strike"]],"num_contracts": num_contracts}
-
-
-def calculate_strangle(put_opt, call_opt, num_contracts, commission_rate):
-    if put_opt["strike"] >= call_opt["strike"]: return None
-    prices = [get_strategy_price(put_opt, "buy"), get_strategy_price(call_opt, "buy")]
-    if any(p is None for p in prices): return None
-
-    base_cost = sum(prices) * num_contracts * 100
-    net_cost = base_cost + calculate_fees(base_cost, commission_rate)
-    return {"net_cost": net_cost, "max_loss": net_cost, "max_profit": float('inf'),
-            "strikes": [put_opt["strike"], call_opt["strike"]],"num_contracts": num_contracts}
+def calculate_strangle(put, call, num_contracts, commission_rate):
+    if put["strike"] >= call["strike"]: return None
+    put_price = get_strategy_price(put, "buy")
+    call_price = get_strategy_price(call, "buy")
+    if None in (put_price, call_price): return None
+    base_cost = (put_price + call_price) * 100 * num_contracts
+    fees = calculate_fees(base_cost, commission_rate)
+    net_cost = base_cost + fees
+    max_loss = net_cost
+    lower_breakeven = put["strike"] - net_cost / (100 * num_contracts)
+    upper_breakeven = call["strike"] + net_cost / (100 * num_contracts)
+    return {"net_cost": net_cost, "max_loss": max_loss, "strikes": [put["strike"], call["strike"]], "lower_breakeven": lower_breakeven, "upper_breakeven": upper_breakeven, "num_contracts": num_contracts}
 
 
 # --- TABLE CREATION ---
@@ -301,70 +319,48 @@ def create_spread_table(options, strategy_func, num_contracts, commission_rate, 
     return df
 
 
-def create_complex_strategy_table(options: list, strategy_func, num_contracts: int, commission_rate: float,
-                                  combo_size: int) -> pd.DataFrame:
-    strikes = sorted(options, key=lambda x: x["strike"])
-    combos = list(combinations(strikes, combo_size))
+def create_complex_strategy_table(options, strategy_func, num_contracts, commission_rate, num_legs):
     data = []
-    for combo in combos:
-        if not all(combo[i]["strike"] < combo[i + 1]["strike"] for i in range(len(combo) - 1)): continue
+    for combo in combinations(options, num_legs):
+        combo = sorted(combo, key=lambda o: o["strike"])
         result = strategy_func(*combo, num_contracts, commission_rate)
         if result:
-            cost, profit, loss = result.get("net_cost"), result.get("max_profit"), result.get("max_loss")
-            if any(v is None for v in [cost, profit, loss]): continue
-            ratio = cost / profit if profit > 0 else float('inf')
+            strikes = tuple(result["strikes"])
             data.append({
-                "strikes": " - ".join(f"{opt['strike']:.2f}" for opt in combo), "Net Cost": cost,
-                "Max Profit": profit, "Max Loss": loss, "Cost-to-Profit Ratio": ratio,
-                "Contracts": result.get("contracts", "N/A"), "strikes": result["strikes"],
-                "contract_ratios": result.get("contract_ratios")
+                "Strikes": strikes,
+                "Net Cost": result["net_cost"],
+                "Max Profit": result["max_profit"],
+                "Max Loss": result["max_loss"]
             })
-    return pd.DataFrame(data)
-
-
-# REPLACE the entire create_vol_strategy_table function in utils.py with this version that includes breakeven points instead of the cost-to-profit ratio.
-
-# REPLACE the entire create_vol_strategy_table function in utils.py with this version that returns the DataFrame without styling.
-
-def create_vol_strategy_table(calls, puts, calc_func, num_contracts, commission_rate):
-    data = []
-    sorted_calls = sorted(calls, key=lambda x: x['strike'])
-    sorted_puts = sorted(puts, key=lambda x: x['strike'])
-    
-    if 'straddle' in calc_func.__name__.lower():
-        for call in sorted_calls:
-            put = next((p for p in sorted_puts if p['strike'] == call['strike']), None)
-            if put:
-                result = calc_func(call, put, num_contracts, commission_rate)
-                if result:
-                    net_cost = result['net_cost']
-                    per_contract = net_cost / (100 * num_contracts)
-                    lower_be = call['strike'] - per_contract
-                    upper_be = call['strike'] + per_contract
-                    result.update({
-                        'lower_breakeven': lower_be,
-                        'upper_breakeven': upper_be
-                    })
-                    data.append(result)
-    elif 'strangle' in calc_func.__name__.lower():
-        for put, call in product(sorted_puts, sorted_calls):
-            if put['strike'] < call['strike']:
-                result = calc_func(put, call, num_contracts, commission_rate)
-                if result:
-                    net_cost = result['net_cost']
-                    per_contract = net_cost / (100 * num_contracts)
-                    lower_be = put['strike'] - per_contract
-                    upper_be = call['strike'] + per_contract
-                    result.update({
-                        'lower_breakeven': lower_be,
-                        'upper_breakeven': upper_be
-                    })
-                    data.append(result)
-    
+    if not data:
+        return pd.DataFrame()
     df = pd.DataFrame(data)
-    if not df.empty:
-        df = df[['strikes', 'net_cost', 'max_loss', 'max_profit', 'lower_breakeven', 'upper_breakeven']]
-        df.columns = ['strikes', 'Net Cost', 'Max Loss', 'Max Profit', 'Lower Breakeven', 'Upper Breakeven']
+    df.set_index("Strikes", inplace=True)
+    return df
+
+def create_vol_strategy_table(calls, puts, strategy_func, num_contracts, commission_rate):
+    data = []
+    for call in calls:
+        for put in puts:
+            if strategy_func.__name__ == "calculate_straddle" and call["strike"] != put["strike"]:
+                continue
+            if strategy_func.__name__ == "calculate_strangle" and put["strike"] >= call["strike"]:
+                continue
+            result = strategy_func(call, put, num_contracts, commission_rate)
+            if result:
+                strikes = result["strikes"]
+                key = tuple(strikes) if len(strikes) > 1 else strikes[0]
+                data.append({
+                    "Strikes": key,
+                    "Net Cost": result["net_cost"],
+                    "Max Loss": result["max_loss"],
+                    "Lower Breakeven": result["lower_breakeven"],
+                    "Upper Breakeven": result["upper_breakeven"]
+                })
+    if not data:
+        return pd.DataFrame()
+    df = pd.DataFrame(data)
+    df.set_index("Strikes", inplace=True)
     return df
 
 
@@ -530,18 +526,19 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
     plot_range_pct = st.session_state.get("plot_range_pct", 0.3)
 
     prices = np.linspace(max(0.1, current_price * (1 - plot_range_pct)), current_price * (1 + plot_range_pct), 50)
-    times = np.linspace(expiration_days, 0.0001, 20)
+    times = np.linspace(0, expiration_days, 20)
     X, Y = np.meshgrid(prices, times)
     Z = np.zeros_like(X)
 
-    scale_factor = 1  # Define scale_factor to avoid NameError and division by zero
 
+    scale_factor = 1  # Define scale_factor to avoid NameError and division by zero
     for i in range(len(times)):
         for j in range(len(prices)):
             price = X[i, j]
-            T = Y[i, j] / 365.0
+            T = (expiration_days - Y[i, j]) / 365.0
             T = max(T, 1e-9)  # Ensure T is always positive to avoid division by zero
             Z[i, j] = (strategy_value(price, T, iv) - net_entry) / scale_factor  # Scale values
+
 
     # Plotting with plotly
     import plotly.graph_objects as go
@@ -551,11 +548,12 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
         title="3D Payoff Visualization",
         scene=dict(
             xaxis_title="Underlying Price",
-            yaxis_title="Days to Expiration",
+            yaxis_title="Days from Now",
             zaxis_title="Profit / Loss",
         ),
         autosize=True,
         margin=dict(l=65, r=50, b=65, t=90),
     )
+
 
     st.plotly_chart(fig, use_container_width=True, key=key)
