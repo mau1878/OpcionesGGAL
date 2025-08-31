@@ -561,12 +561,30 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
         return
 
     net_entry = strategy_result.get("net_cost", 0)
-    # Use mid-price (average of bid/ask) for raw_net to avoid fee distortion
-    mid_price = sum(get_strategy_price(opt, "buy" if "buy" in key.lower() else "sell") for opt in strategy_result.get("strikes", []) if get_strategy_price(opt, "buy" or "sell")) / len(strategy_result.get("strikes", [1]))
-    raw_net = mid_price * 100 * strategy_result.get("num_contracts", 1) if mid_price else net_entry
-    if net_entry is None: return
-
+    strikes = strategy_result.get("strikes", [])
     num_contracts = strategy_result.get("num_contracts", 1)
+
+    # Determine option type and fetch corresponding options
+    options = st.session_state.get("filtered_calls", []) if "call" in key.lower() else st.session_state.get("filtered_puts", [])
+    if not options:
+        st.warning("No options data available for visualization.")
+        return
+
+    # Map strikes to options
+    matched_options = []
+    for strike in strikes:
+        matched = next((opt for opt in options if opt["strike"] == strike and opt["expiration"] == st.session_state.selected_exp), None)
+        if matched:
+            matched_options.append(matched)
+        else:
+            logger.warning(f"No matching option found for strike {strike}")
+            matched_options.append({"px_ask": 0, "px_bid": 0})  # Fallback to avoid crash
+
+    # Calculate mid-price
+    action = "buy" if "buy" in key.lower() else "sell"
+    prices = [get_strategy_price(opt, action) for opt in matched_options if get_strategy_price(opt, action) is not None]
+    mid_price = sum(prices) / len(prices) if prices else 0
+    raw_net = mid_price * 100 * num_contracts if mid_price > 0 else net_entry
 
     def black_scholes(S, K, T, r, sigma, option_type="call"):
         try:
@@ -597,7 +615,7 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
     def strategy_value(price, T, sigma):
         position_value = 0.0
         strategy_key = key.lower() if key else ""
-        r = min(st.session_state.get("risk_free_rate", 0.10), 1.0)  # Cap at 100% to prevent extremes
+        r = st.session_state.get("risk_free_rate", 0.50)  # Reverted to 50% as per your input
 
         if "spread" in strategy_key:
             strikes = strategy_result["strikes"]
@@ -615,8 +633,8 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
             position_value *= 100 * num_contracts
 
         elif "butterfly" in strategy_key or "condor" in strategy_key:
-            ratios = strategy_result.get("contract_ratios")
-            strikes = strategy_result.get("strikes")
+            ratios = strategy_result.get("contract_ratios", [])
+            strikes = strategy_result.get("strikes", [])
             opt_type = "call" if "call" in strategy_key else "put"
             if ratios and strikes:
                 vals = [black_scholes(price, k, T, r, sigma, opt_type) for k in strikes]
@@ -636,9 +654,9 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
 
         return position_value
 
-    # Calibrate IV with mid-price
+    # Calibrate IV
     strategy_key = key.lower() if key else ""
-    r = min(st.session_state.get("risk_free_rate", 0.10), 1.0)
+    r = st.session_state.get("risk_free_rate", 0.50)
     def objective(sigma):
         if sigma <= 0: return float('inf')
         return abs(strategy_value(current_price, expiration_days / 365.0, sigma) - raw_net)
