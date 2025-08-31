@@ -1,5 +1,3 @@
-# REPLACE the entire contents of this file
-
 import streamlit as st
 import numpy as np
 import utils
@@ -21,13 +19,21 @@ with tab1:
 
     st.subheader("Análisis Detallado por Ratio")
     detailed_df_call = utils.create_spread_table(calls, utils.calculate_bear_call_spread, st.session_state.num_contracts, st.session_state.commission_rate, False)
-    st.dataframe(detailed_df_call.style.format({
-        "Net Credit": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}", "Cost-to-Profit Ratio": "{:.2%}"
-    }))
+    if not detailed_df_call.empty:
+        styled_df = detailed_df_call.style.format({
+            "Net Credit": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}", "Cost-to-Profit Ratio": "{:.2%}"
+        })
+        st.dataframe(styled_df)
+    else:
+        st.dataframe(detailed_df_call)
+        st.warning("No data available for Bear Call Spread. Ensure enough call options are available.")
 
     st.subheader("Matriz de Crédito Neto (Venta en Fila, Compra en Columna)")
     profit_df, _, _, _ = utils.create_spread_matrix(calls, utils.calculate_bear_call_spread, st.session_state.num_contracts, st.session_state.commission_rate, False)
-    st.dataframe(profit_df.style.format("{:.2f}").background_gradient(cmap='viridis'))
+    if not profit_df.empty:
+        st.dataframe(profit_df.style.format("{:.2f}").background_gradient(cmap='viridis'))
+    else:
+        st.warning("No profit matrix data available.")
 
     st.subheader("Visualización 3D")
     if not detailed_df_call.empty:
@@ -36,7 +42,7 @@ with tab1:
             short_strike, long_strike = selected
             row = detailed_df_call.loc[selected]
             result = {
-                "net_cost": -row["Net Credit"],
+                "net_cost": -row["Net Credit"],  # Convert net credit to net cost for visualization
                 "max_profit": row["Max Profit"],
                 "max_loss": row["Max Loss"],
                 "strikes": [short_strike, long_strike],
@@ -52,13 +58,21 @@ with tab2:
 
     st.subheader("Análisis Detallado por Ratio")
     detailed_df_put = utils.create_spread_table(puts, utils.calculate_bear_put_spread, st.session_state.num_contracts, st.session_state.commission_rate, True)
-    st.dataframe(detailed_df_put.style.format({
-        "Net Cost": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}", "Cost-to-Profit Ratio": "{:.2%}"
-    }))
+    if not detailed_df_put.empty:
+        styled_df = detailed_df_put.style.format({
+            "Net Cost": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}", "Cost-to-Profit Ratio": "{:.2%}"
+        })
+        st.dataframe(styled_df)
+    else:
+        st.dataframe(detailed_df_put)
+        st.warning("No data available for Bear Put Spread. Ensure enough put options are available.")
 
     st.subheader("Matriz de Costo Neto (Compra en Fila, Venta en Columna)")
     profit_df, _, _, _ = utils.create_spread_matrix(puts, utils.calculate_bear_put_spread, st.session_state.num_contracts, st.session_state.commission_rate, True)
-    st.dataframe(profit_df.style.format("{:.2f}").background_gradient(cmap='viridis_r'))
+    if not profit_df.empty:
+        st.dataframe(profit_df.style.format("{:.2f}").background_gradient(cmap='viridis_r'))
+    else:
+        st.warning("No profit matrix data available.")
 
     st.subheader("Visualización 3D")
     if not detailed_df_put.empty:

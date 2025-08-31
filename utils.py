@@ -153,16 +153,14 @@ def calculate_bear_call_spread(short_opt, long_opt, num_contracts, commission_ra
     if short_opt["strike"] >= long_opt["strike"]: return None
     short_price = get_strategy_price(short_opt, "sell")
     long_price = get_strategy_price(long_opt, "buy")
-    if any(p is None for p in [short_price, long_price]): return None
-
-    base_credit = (short_price - long_price) * num_contracts * 100
-    total_fees = calculate_fees(abs(base_credit), commission_rate)
-    net_credit = base_credit - total_fees
-
+    if None in (short_price, long_price): return None
+    base_credit = (short_price - long_price) * 100 * num_contracts
+    fees = calculate_fees(abs(base_credit), commission_rate)
+    net_credit = base_credit - fees  # Net credit is positive for credit spreads
+    spread_width = long_opt["strike"] - short_opt["strike"]
     max_profit = net_credit
-    max_loss = (long_opt["strike"] - short_opt["strike"]) * num_contracts * 100 - max_profit
-    return {"net_cost": -net_credit, "max_profit": max_profit, "max_loss": max_loss,
-            "strikes": [short_opt["strike"], long_opt["strike"]],"num_contracts": num_contracts}
+    max_loss = (spread_width * 100 * num_contracts) - net_credit
+    return {"net_cost": -net_credit, "max_profit": max_profit, "max_loss": max_loss, "strikes": [short_opt["strike"], long_opt["strike"]], "num_contracts": num_contracts}
 
 
 def calculate_bear_put_spread(long_opt, short_opt, num_contracts, commission_rate):
@@ -303,11 +301,11 @@ def create_spread_table(options, strategy_func, num_contracts, commission_rate, 
             cost = result["net_cost"]
             max_profit = result["max_profit"]
             max_loss = result["max_loss"]
-            cost_to_profit = abs(cost / max_profit) if max_profit != 0 else float('inf')
+            cost_to_profit = abs(cost / max_profit) if is_debit and max_profit != 0 else 0 if not is_debit else float('inf')
             data.append({
                 "Long Strike": long_strike,
                 "Short Strike": short_strike,
-                "Net Cost" if is_debit else "Net Credit": abs(cost) if is_debit else -cost,
+                "Net Cost" if is_debit else "Net Credit": -cost if not is_debit else cost,
                 "Max Profit": max_profit,
                 "Max Loss": max_loss,
                 "Cost-to-Profit Ratio": cost_to_profit
