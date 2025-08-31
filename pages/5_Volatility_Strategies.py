@@ -30,10 +30,16 @@ with tab1:
         result["strikes"] = [selected] if isinstance(selected, (int, float)) else list(selected)
         result["num_contracts"] = st.session_state.num_contracts
         result["raw_net"] = result["net_cost"]
-        if result:
-            utils.visualize_volatility_3d(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Straddle")
+        # Find options corresponding to selected strike
+        call_opt = next((opt for opt in calls if opt["strike"] == selected), None)
+        put_opt = next((opt for opt in puts if opt["strike"] == selected), None)
+        if result and call_opt and put_opt:
+            utils.visualize_volatility_3d(
+                result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
+                "Straddle", options=[call_opt, put_opt], option_actions=["buy", "buy"]
+            )
         else:
-            st.warning("Selección inválida. Por favor, seleccione una combinación válida.")
+            st.warning("Selección inválida o datos de opciones no disponibles.")
 
 with tab2:
     st.subheader("Long Strangle")
@@ -52,7 +58,13 @@ with tab2:
         result["strikes"] = list(selected) if isinstance(selected, tuple) else [selected]
         result["num_contracts"] = st.session_state.num_contracts
         result["raw_net"] = result["net_cost"]
-        if result:
-            utils.visualize_volatility_3d(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Strangle")
+        # Find options corresponding to selected strikes
+        put_opt = next((opt for opt in puts if opt["strike"] == selected[0]), None)
+        call_opt = next((opt for opt in calls if opt["strike"] == selected[1]), None)
+        if result and put_opt and call_opt:
+            utils.visualize_volatility_3d(
+                result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
+                "Strangle", options=[put_opt, call_opt], option_actions=["buy", "buy"]
+            )
         else:
-            st.warning("Selección inválida. Por favor, seleccione una combinación válida.")
+            st.warning("Selección inválida o datos de opciones no disponibles.")

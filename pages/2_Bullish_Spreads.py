@@ -41,10 +41,16 @@ with tab1:
         result["num_contracts"] = st.session_state.num_contracts
         result["raw_net"] = result["Net Cost"]  # Add for calibration
         result["net_cost"] = result["Net Cost"]
-        if result:
-            utils.visualize_bullish_3d(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Bull Call Spread")
+        # Find options corresponding to selected strikes
+        long_opt = next((opt for opt in calls if opt["strike"] == selected[0]), None)
+        short_opt = next((opt for opt in calls if opt["strike"] == selected[1]), None)
+        if result and long_opt and short_opt:
+            utils.visualize_bullish_3d(
+                result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
+                "Bull Call Spread", options=[long_opt, short_opt], option_actions=["buy", "sell"]
+            )
         else:
-            st.warning("Selección inválida. Por favor, seleccione una combinación válida.")
+            st.warning("Selección inválida o datos de opciones no disponibles.")
 
 with tab2:
     st.header("Bull Put Spread (Crédito)")
@@ -73,7 +79,13 @@ with tab2:
         result["num_contracts"] = st.session_state.num_contracts
         result["raw_net"] = -result.get("Net Credit", 0)  # Credit is negative net_cost
         result["net_cost"] = -result.get("Net Credit", 0)
-        if result:
-            utils.visualize_bullish_3d(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Bull Put Spread")
+        # Find options corresponding to selected strikes
+        short_opt = next((opt for opt in puts if opt["strike"] == selected[1]), None)
+        long_opt = next((opt for opt in puts if opt["strike"] == selected[0]), None)
+        if result and short_opt and long_opt:
+            utils.visualize_bullish_3d(
+                result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
+                "Bull Put Spread", options=[short_opt, long_opt], option_actions=["sell", "buy"]
+            )
         else:
-            st.warning("Selección inválida. Por favor, seleccione una combinación válida.")
+            st.warning("Selección inválida o datos de opciones no disponibles.")

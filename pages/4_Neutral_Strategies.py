@@ -30,11 +30,18 @@ with tab1:
         result["strikes"] = list(selected) if isinstance(selected, tuple) else [selected]
         result["num_contracts"] = st.session_state.num_contracts
         result["contract_ratios"] = [1, -2, 1]
-        result["raw_net"] = result["net_cost"]  # Assuming debit
-        if result:
-            utils.visualize_neutral_3d(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Call Butterfly")
+        result["raw_net"] = result["net_cost"]
+        # Find options corresponding to selected strikes
+        long_low = next((opt for opt in calls if opt["strike"] == selected[0]), None)
+        short_mid = next((opt for opt in calls if opt["strike"] == selected[1]), None)
+        long_high = next((opt for opt in calls if opt["strike"] == selected[2]), None)
+        if result and long_low and short_mid and long_high:
+            utils.visualize_neutral_3d(
+                result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
+                "Call Butterfly", options=[long_low, short_mid, long_high], option_actions=["buy", "sell", "buy"]
+            )
         else:
-            st.warning("Selección inválida. Por favor, seleccione una combinación válida.")
+            st.warning("Selección inválida o datos de opciones no disponibles.")
 
 with tab2:
     st.subheader("Put Butterfly")
@@ -54,10 +61,17 @@ with tab2:
         result["num_contracts"] = st.session_state.num_contracts
         result["contract_ratios"] = [1, -2, 1]
         result["raw_net"] = result["net_cost"]
-        if result:
-            utils.visualize_neutral_3d(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Put Butterfly")
+        # Find options corresponding to selected strikes
+        long_low = next((opt for opt in puts if opt["strike"] == selected[0]), None)
+        short_mid = next((opt for opt in puts if opt["strike"] == selected[1]), None)
+        long_high = next((opt for opt in puts if opt["strike"] == selected[2]), None)
+        if result and long_low and short_mid and long_high:
+            utils.visualize_neutral_3d(
+                result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
+                "Put Butterfly", options=[long_high, short_mid, long_low], option_actions=["buy", "sell", "buy"]
+            )
         else:
-            st.warning("Selección inválida. Por favor, seleccione una combinación válida.")
+            st.warning("Selección inválida o datos de opciones no disponibles.")
 
 with tab3:
     st.subheader("Call Condor")
@@ -77,10 +91,19 @@ with tab3:
         result["num_contracts"] = st.session_state.num_contracts
         result["contract_ratios"] = [1, -1, -1, 1]
         result["raw_net"] = result["net_cost"]
-        if result:
-            utils.visualize_neutral_3d(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Call Condor")
+        # Find options corresponding to selected strikes
+        long_low = next((opt for opt in calls if opt["strike"] == selected[0]), None)
+        short_mid_low = next((opt for opt in calls if opt["strike"] == selected[1]), None)
+        short_mid_high = next((opt for opt in calls if opt["strike"] == selected[2]), None)
+        long_high = next((opt for opt in calls if opt["strike"] == selected[3]), None)
+        if result and long_low and short_mid_low and short_mid_high and long_high:
+            utils.visualize_neutral_3d(
+                result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
+                "Call Condor", options=[long_low, short_mid_low, short_mid_high, long_high],
+                option_actions=["buy", "sell", "sell", "buy"]
+            )
         else:
-            st.warning("Selección inválida. Por favor, seleccione una combinación válida.")
+            st.warning("Selección inválida o datos de opciones no disponibles.")
 
 with tab4:
     st.subheader("Put Condor")
@@ -100,7 +123,16 @@ with tab4:
         result["num_contracts"] = st.session_state.num_contracts
         result["contract_ratios"] = [1, -1, -1, 1]
         result["raw_net"] = result["net_cost"]
-        if result:
-            utils.visualize_neutral_3d(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Put Condor")
+        # Find options corresponding to selected strikes
+        long_low = next((opt for opt in puts if opt["strike"] == selected[0]), None)
+        short_mid_low = next((opt for opt in puts if opt["strike"] == selected[1]), None)
+        short_mid_high = next((opt for opt in puts if opt["strike"] == selected[2]), None)
+        long_high = next((opt for opt in puts if opt["strike"] == selected[3]), None)
+        if result and long_low and short_mid_low and short_mid_high and long_high:
+            utils.visualize_neutral_3d(
+                result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
+                "Put Condor", options=[long_high, short_mid_high, short_mid_low, long_low],
+                option_actions=["buy", "sell", "sell", "buy"]
+            )
         else:
-            st.warning("Selección inválida. Por favor, seleccione una combinación válida.")
+            st.warning("Selección inválida o datos de opciones no disponibles.")
