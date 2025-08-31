@@ -406,6 +406,8 @@ def create_spread_matrix(options: list, strategy_func, num_contracts: int, commi
 
 # REPLACE the entire visualize_3d_payoff function in utils.py with this corrected and enhanced version.
 
+# REPLACE the entire visualize_3d_payoff function in utils.py with this corrected and enhanced version that includes IV calibration.
+
 def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFAULT_IV, key=None):
     if not strategy_result or "strikes" not in strategy_result:
         st.warning("No valid strategy selected for visualization.")
@@ -427,75 +429,88 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
                 val = K * np.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
         return np.nan_to_num(val)
 
-    # Use user-configurable plot range
-    plot_range_pct = st.session_state.get("plot_range_pct", 0.3)  # Default 30% if not set
+    def strategy_value(price, T, sigma):
+        position_value = 0.0
+        strategy_key = key.lower() if key else ""
+        
+        if "spread" in strategy_key:
+            strikes = strategy_result["strikes"]
+            k1, k2 = strikes[0], strikes[1]
+            
+            if "bull call" in strategy_key:  # Long Call Spread
+                position_value = (black_scholes(price, k1, T, r, sigma, "call") - black_scholes(price, k2, T, r, sigma, "call"))
+            elif "bull put" in strategy_key:  # Short Put Spread
+                position_value = (black_scholes(price, k1, T, r, sigma, "put") - black_scholes(price, k2, T, r, sigma, "put"))
+            elif "bear call" in strategy_key:  # Short Call Spread
+                position_value = (black_scholes(price, k2, T, r, sigma, "call") - black_scholes(price, k1, T, r, sigma, "call"))
+            elif "bear put" in strategy_key:  # Long Put Spread
+                position_value = (black_scholes(price, k2, T, r, sigma, "put") - black_scholes(price, k1, T, r, sigma, "put"))
+            
+            position_value *= 100 * num_contracts
+
+        elif "butterfly" in strategy_key or "condor" in strategy_key:
+            ratios = strategy_result.get("contract_ratios")
+            strikes = strategy_result.get("strikes")
+            opt_type = "call" if "call" in strategy_key else "put"
+            if ratios and strikes:
+                vals = [black_scholes(price, k, T, r, sigma, opt_type) for k in strikes]
+                position_value = sum(r * v for r, v in zip(ratios, vals)) * 100
+
+        elif "straddle" in strategy_key:
+            k = strategy_result["strikes"][0]
+            call_val = black_scholes(price, k, T, r, sigma, "call")
+            put_val = black_scholes(price, k, T, r, sigma, "put")
+            position_value = (call_val + put_val) * 100 * num_contracts
+
+        elif "strangle" in strategy_key:
+            put_k, call_k = strategy_result["strikes"]
+            call_val = black_scholes(price, call_k, T, r, sigma, "call")
+            put_val = black_scholes(price, put_k, T, r, sigma, "put")
+            position_value = (call_val + put_val) * 100 * num_contracts
+
+        return position_value
+
+    # Calibrate IV to match net_cost at current price and initial time
+    strategy_key = key.lower() if key else ""
+    r = st.session_state.get("risk_free_rate", 0.50)
+    def objective(sigma):
+        if sigma <= 0: return float('inf')
+        return strategy_value(current_price, expiration_days / 365.0, sigma) - net_cost
+
+    try:
+        from scipy.optimize import fsolve
+        calibrated_iv = fsolve(objective, iv)[0]
+        if calibrated_iv > 0 and not np.isnan(calibrated_iv):
+            iv = calibrated_iv
+    except:
+        pass  # Use original IV if calibration fails
+
+    # Now compute the grid with calibrated IV
+    plot_range_pct = st.session_state.get("plot_range_pct", 0.3)
     prices = np.linspace(max(0.1, current_price * (1 - plot_range_pct)), current_price * (1 + plot_range_pct), 50)
     times = np.linspace(0, expiration_days, 20)
     X, Y = np.meshgrid(prices, times)
     Z = np.zeros_like(X)
-    
-    strategy_key = key.lower() if key else ""
-    r = st.session_state.get("risk_free_rate", 0.50)  # Default 50% if not set
 
     for i in range(len(times)):
         for j in range(len(prices)):
             price = X[i, j]
             T = (expiration_days - Y[i, j]) / 365.0
-            position_value = 0.0
-            
-            if "spread" in strategy_key:
-                strikes = strategy_result["strikes"]
-                k1, k2 = strikes[0], strikes[1]
-                
-                if "bull call" in strategy_key:  # Long Call Spread
-                    position_value = (black_scholes(price, k1, T, r, iv, "call") - black_scholes(price, k2, T, r, iv, "call"))
-                elif "bull put" in strategy_key:  # Short Put Spread
-                    position_value = (black_scholes(price, k1, T, r, iv, "put") - black_scholes(price, k2, T, r, iv, "put"))  # Fixed sign: long low (k1), short high (k2)
-                elif "bear call" in strategy_key:  # Short Call Spread
-                    position_value = (black_scholes(price, k2, T, r, iv, "call") - black_scholes(price, k1, T, r, iv, "call"))  # Fixed sign: long high (k2), short low (k1)
-                elif "bear put" in strategy_key:  # Long Put Spread
-                    position_value = (black_scholes(price, k2, T, r, iv, "put") - black_scholes(price, k1, T, r, iv, "put"))
-                
-                position_value *= 100 * num_contracts
-
-            elif "butterfly" in strategy_key or "condor" in strategy_key:
-                ratios = strategy_result.get("contract_ratios")
-                strikes = strategy_result.get("strikes")
-                opt_type = "call" if "call" in strategy_key else "put"
-                if ratios and strikes:
-                    vals = [black_scholes(price, k, T, r, iv, opt_type) for k in strikes]
-                    # Ratios from calculation functions are already scaled by num_contracts
-                    position_value = sum(r * v for r, v in zip(ratios, vals)) * 100
-
-            elif "straddle" in strategy_key:
-                k = strategy_result["strikes"][0]
-                call_val = black_scholes(price, k, T, r, iv, "call")
-                put_val = black_scholes(price, k, T, r, iv, "put")
-                position_value = (call_val + put_val) * 100 * num_contracts
-
-            elif "strangle" in strategy_key:
-                put_k, call_k = strategy_result["strikes"]
-                call_val = black_scholes(price, call_k, T, r, iv, "call")
-                put_val = black_scholes(price, put_k, T, r, iv, "put")
-                position_value = (call_val + put_val) * 100 * num_contracts
-
-            Z[i, j] = position_value - net_cost
+            Z[i, j] = strategy_value(price, T, iv) - net_cost
 
     # Force Z range to include 0 with margin
     z_min = min(Z.min(), 0)
     z_max = max(Z.max(), 0)
-    z_margin = 0.1 * (z_max - z_min) if z_max - z_min > 0 else 1.0  # Small margin if flat
+    z_margin = 0.1 * (z_max - z_min) if z_max - z_min > 0 else 1.0
     z_min -= z_margin
     z_max += z_margin
 
     payoff_surface = go.Surface(z=Z, x=X, y=Y, colorscale='RdYlGn', cmin=z_min, cmax=z_max,
                                 colorbar=dict(title='Profit/Loss'))
 
-    # Breakeven plane (blue) at Z=0
     breakeven_plane = go.Surface(z=np.zeros_like(X), x=X, y=Y, opacity=0.7, showscale=False,
                                  colorscale=[[0, '#0000FF'], [1, '#0000FF']])
 
-    # Current price plane (red) at X=current_price
     yy, zz = np.meshgrid([Y.min(), Y.max()], [z_min, z_max])
     xx = np.full_like(yy, current_price)
     current_price_plane = go.Surface(x=xx, y=yy, z=zz, opacity=0.7, showscale=False,
