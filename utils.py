@@ -563,6 +563,8 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
     net_entry = strategy_result.get("net_cost", 0)
     strikes = strategy_result.get("strikes", [])
     num_contracts = strategy_result.get("num_contracts", 1)
+    max_profit = strategy_result.get("max_profit", 0)
+    max_loss = strategy_result.get("max_loss", 0)
 
     # Determine option type and fetch corresponding options
     options = st.session_state.get("filtered_calls", []) if "call" in key.lower() else st.session_state.get("filtered_puts", [])
@@ -615,7 +617,7 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
     def strategy_value(price, T, sigma):
         position_value = 0.0
         strategy_key = key.lower() if key else ""
-        r = st.session_state.get("risk_free_rate", 0.50)  # Reverted to 50% as per your input
+        r = st.session_state.get("risk_free_rate", 0.50)  # 50% as per your input
 
         if "spread" in strategy_key:
             strikes = strategy_result["strikes"]
@@ -681,10 +683,8 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
     X, Y = np.meshgrid(prices, times)
     Z = np.zeros_like(X)
 
-    max_profit = strategy_result.get("max_profit", 1.0)  # Default to 1 to avoid division by zero
-    scale_factor = max_profit if max_profit > 0 else abs(net_entry) if abs(net_entry) > 0 else 1.0
-    if "straddle" in strategy_key or "strangle" in strategy_key:
-        scale_factor *= 1.5
+    # Improved scaling factor: use the maximum of absolute values to reflect full range
+    scale_factor = max(abs(max_profit), abs(max_loss), abs(net_entry)) if max(abs(max_profit), abs(max_loss), abs(net_entry)) > 0 else 1.0
 
     for i in range(len(times)):
         for j in range(len(prices)):
