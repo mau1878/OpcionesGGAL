@@ -8,6 +8,8 @@ from math import gcd
 import plotly.graph_objects as go
 import logging
 from scipy.stats import norm
+# ADD the following import to utils.py if not already present
+from scipy.optimize import minimize_scalar
 
 # --- CONFIGURATION ---
 logging.basicConfig(level=logging.INFO)
@@ -331,26 +333,48 @@ def create_complex_strategy_table(options: list, strategy_func, num_contracts: i
     return pd.DataFrame(data)
 
 
-def create_vol_strategy_table(calls: list, puts: list, strategy_func, num_contracts: int,
-                              commission_rate: float) -> pd.DataFrame:
+# REPLACE the entire create_vol_strategy_table function in utils.py with this version that includes breakeven points instead of the cost-to-profit ratio.
+
+def create_vol_strategy_table(calls, puts, calc_func, num_contracts, commission_rate):
     data = []
-    if "straddle" in strategy_func.__name__:
-        put_map = {p['strike']: p for p in puts}
-        for call in (c for c in calls if c['strike'] in put_map):
-            result = strategy_func(call, put_map[call['strike']], num_contracts, commission_rate)
-            if result:
-                data.append(
-                    {"Strikes": f"{call['strike']:.2f}", "Net Cost": result["net_cost"], "Max Loss": result["max_loss"],
-                     "Max Profit": "Unlimited", "Cost-to-Profit Ratio": "N/A", "strikes": result["strikes"]})
-    else:  # Strangle
-        for put, call in product(puts, calls):
-            result = strategy_func(put, call, num_contracts, commission_rate)
-            if result:
-                data.append(
-                    {"Strikes": f"{put['strike']:.2f} (P) - {call['strike']:.2f} (C)", "Net Cost": result["net_cost"],
-                     "Max Loss": result["max_loss"], "Max Profit": "Unlimited", "Cost-to-Profit Ratio": "N/A",
-                     "strikes": result["strikes"]})
-    return pd.DataFrame(data)
+    sorted_calls = sorted(calls, key=lambda x: x['strike'])
+    sorted_puts = sorted(puts, key=lambda x: x['strike'])
+    
+    if 'straddle' in calc_func.__name__.lower():
+        for call in sorted_calls:
+            put = next((p for p in sorted_puts if p['strike'] == call['strike']), None)
+            if put:
+                result = calc_func(call, put, num_contracts, commission_rate)
+                if result:
+                    net_cost = result['net_cost']
+                    per_contract = net_cost / (100 * num_contracts)
+                    lower_be = call['strike'] - per_contract
+                    upper_be = call['strike'] + per_contract
+                    result.update({
+                        'lower_breakeven': lower_be,
+                        'upper_breakeven': upper_be
+                    })
+                    data.append(result)
+    elif 'strangle' in calc_func.__name__.lower():
+        for put, call in product(sorted_puts, sorted_calls):
+            if put['strike'] < call['strike']:
+                result = calc_func(put, call, num_contracts, commission_rate)
+                if result:
+                    net_cost = result['net_cost']
+                    per_contract = net_cost / (100 * num_contracts)
+                    lower_be = put['strike'] - per_contract
+                    upper_be = call['strike'] + per_contract
+                    result.update({
+                        'lower_breakeven': lower_be,
+                        'upper_breakeven': upper_be
+                    })
+                    data.append(result)
+    
+    df = pd.DataFrame(data)
+    if not df.empty:
+        df = df[['strikes', 'net_cost', 'max_loss', 'max_profit', 'lower_breakeven', 'upper_breakeven']]
+        df.columns = ['Strikes', 'Net Cost', 'Max Loss', 'Max Profit', 'Lower Breakeven', 'Upper Breakeven']
+    return df.style.format("{:.2f}", subset=['Net Cost', 'Max Loss', 'Lower Breakeven', 'Upper Breakeven'])
 
 
 # REPLACE the broken create_spread_matrix function with this new one.
@@ -473,17 +497,21 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
     # Calibrate IV to match net_cost at current price and initial time
     strategy_key = key.lower() if key else ""
     r = st.session_state.get("risk_free_rate", 0.50)
+    # REPLACE the calibration part in visualize_3d_payoff function in utils.py with this improved version using minimize_scalar for |objective|.
+
+    # Calibrate IV to minimize |strategy_value - net_cost| at current price and initial time
     def objective(sigma):
         if sigma <= 0: return float('inf')
         return strategy_value(current_price, expiration_days / 365.0, sigma) - net_cost
 
     try:
-        from scipy.optimize import fsolve
-        calibrated_iv = fsolve(objective, iv)[0]
-        if calibrated_iv > 0 and not np.isnan(calibrated_iv):
+        from scipy.optimize import minimize_scalar
+        result = minimize_scalar(lambda sigma: abs(objective(sigma)), bounds=(0.01, 10.0), tol=1e-5)
+        calibrated_iv = result.x
+        if calibrated_iv > 0 and not np.isnan(calibrated_iv) and result.success:
             iv = calibrated_iv
     except:
-        pass  # Use original IV if calibration fails
+        pass  # Use original IV if optimization fails
 
     # Now compute the grid with calibrated IV
     plot_range_pct = st.session_state.get("plot_range_pct", 0.3)
