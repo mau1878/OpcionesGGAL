@@ -403,31 +403,71 @@ def calculate_strangle(put_opt, call_opt, num_contracts, commission_rate):
         "strikes": [put_opt["strike"], call_opt["strike"]],
         "num_contracts": num_contracts
     }
+def calculate_option_iv(S, K, T, r, premium, option_type="call"):
+    """Calculate implied volatility for a single option using bisection."""
+    def bs_price(sigma):
+        val = black_scholes(S, K, T, r, sigma, option_type)
+        return val - premium
 
+    low, high = 0.01, 5.0  # IV bounds
+    epsilon = 1e-6
+    max_iter = 100
+    iter_count = 0
+
+    while iter_count < max_iter:
+        mid = (low + high) / 2
+        price_diff = bs_price(mid)
+        if abs(price_diff) < epsilon:
+            return mid
+        if price_diff > 0:
+            high = mid
+        else:
+            low = mid
+        iter_count += 1
+
+    logger.warning(f"IV calculation did not converge for S={S}, K={K}, T={T}, premium={premium}")
+    return DEFAULT_IV
 # --- Shared Helpers for Viz and Tables ---
 
-def _calibrate_iv(raw_net, current_price, expiration_days, strategy_value_func):
-    r = st.session_state.get("risk_free_rate", 0.50)
-    
-    def objective(sigma):
-        if sigma <= 0: 
-            return float('inf')
-        try:
-            model_value = strategy_value_func(current_price, expiration_days / 365.0, sigma)
-            return abs(model_value - raw_net)
-        except Exception:
-            return float('inf')
-
-    try:
-        result = minimize_scalar(objective, bounds=(0.01, 5.0), method='bounded')
-        calibrated_iv = result.x
-        if calibrated_iv > 0 and not np.isnan(calibrated_iv) and result.success and result.fun < raw_net * 0.1:
-            return calibrated_iv
-        else:
-            raise ValueError("Calibration tolerance not met")
-    except Exception as e:
-        logger.warning(f"IV calibration failed: {e}. Using default IV.")
+def _calibrate_iv(raw_net, current_price, expiration_days, strategy_value_func, options, option_actions, contract_ratios=None):
+    """Calculate implied volatility for a strategy by averaging IVs of individual options."""
+    if not options or not option_actions:
+        logger.warning("No options or actions provided for IV calibration")
         return DEFAULT_IV
+
+    r = st.session_state.get("risk_free_rate", 0.50)
+    T = expiration_days / 365.0
+    ivs = []
+    weights = contract_ratios if contract_ratios else [1.0] * len(options)
+
+    for opt, action, weight in zip(options, option_actions, weights):
+        premium = get_strategy_price(opt, action)
+        if premium is None:
+            logger.warning(f"Invalid premium for option {opt['symbol']}")
+            continue
+        iv = calculate_option_iv(
+            S=current_price,
+            K=opt["strike"],
+            T=T,
+            r=r,
+            premium=premium,
+            option_type=opt["type"]
+        )
+        if iv and not np.isnan(iv):
+            ivs.append(iv * weight)
+
+    if ivs:
+        total_weight = sum(weights[:len(ivs)])
+        calibrated_iv = sum(ivs) / total_weight if total_weight > 0 else DEFAULT_IV
+        # Verify the strategy value with the averaged IV
+        try:
+            model_value = strategy_value_func(current_price, T, calibrated_iv)
+            if abs(model_value - raw_net) < raw_net * 0.1:
+                return calibrated_iv
+        except Exception:
+            pass
+    logger.warning("Direct IV calibration failed or verification not met. Using default IV.")
+    return DEFAULT_IV
 
 def _compute_payoff_grid(strategy_value_func, current_price, expiration_days, iv, net_entry):
     plot_range_pct = st.session_state.get("plot_range_pct", 0.3)
@@ -626,7 +666,7 @@ def create_spread_matrix(options, calc_func, num_contracts, commission_rate, is_
 
 # --- Split 3D Visualization Functions ---
 
-def visualize_bullish_3d(result, current_price, expiration_days, iv, key):
+def visualize_bullish_3d(result, current_price, expiration_days, iv, key, options, option_actions):
     raw_net = result["raw_net"]
     net_entry = result["net_cost"]
     num_contracts = result["num_contracts"]
@@ -651,7 +691,7 @@ def visualize_bullish_3d(result, current_price, expiration_days, iv, key):
                         black_scholes(price, k1, T, r, sigma, "put"))
         return 0.0
     
-    iv = _calibrate_iv(raw_net, current_price, expiration_days, strategy_value)
+    iv = _calibrate_iv(raw_net, current_price, expiration_days, strategy_value, options, option_actions)
     iv = max(iv, 1e-9)
     
     X, Y, Z, min_price, max_price, times = _compute_payoff_grid(
@@ -662,7 +702,7 @@ def visualize_bullish_3d(result, current_price, expiration_days, iv, key):
     fig = _create_3d_figure(X, Y, Z, f"3D Payoff for {key} (IV: {iv:.1%})", current_price)
     st.plotly_chart(fig, use_container_width=True, key=key)
 
-def visualize_bearish_3d(result, current_price, expiration_days, iv, key):
+def visualize_bearish_3d(result, current_price, expiration_days, iv, key, options, option_actions):
     raw_net = result["raw_net"]
     net_entry = result["net_cost"]
     num_contracts = result["num_contracts"]
@@ -687,7 +727,7 @@ def visualize_bearish_3d(result, current_price, expiration_days, iv, key):
                         black_scholes(price, k1, T, r, sigma, "put"))
         return 0.0
     
-    iv = _calibrate_iv(raw_net, current_price, expiration_days, strategy_value)
+    iv = _calibrate_iv(raw_net, current_price, expiration_days, strategy_value, options, option_actions)
     iv = max(iv, 1e-9)
     
     X, Y, Z, min_price, max_price, times = _compute_payoff_grid(
@@ -698,7 +738,7 @@ def visualize_bearish_3d(result, current_price, expiration_days, iv, key):
     fig = _create_3d_figure(X, Y, Z, f"3D Payoff for {key} (IV: {iv:.1%})", current_price)
     st.plotly_chart(fig, use_container_width=True, key=key)
 
-def visualize_neutral_3d(result, current_price, expiration_days, iv, key):
+def visualize_neutral_3d(result, current_price, expiration_days, iv, key, options, option_actions):
     raw_net = result["raw_net"]
     net_entry = result["net_cost"]
     num_contracts = result["num_contracts"]
@@ -715,7 +755,7 @@ def visualize_neutral_3d(result, current_price, expiration_days, iv, key):
             vals = [black_scholes(price, k, T, r, sigma, opt_type) for k in strikes]
         return sum(r * v for r, v in zip(ratios, vals)) * 100 * num_contracts
     
-    iv = _calibrate_iv(raw_net, current_price, expiration_days, strategy_value)
+    iv = _calibrate_iv(raw_net, current_price, expiration_days, strategy_value, options, option_actions, contract_ratios=ratios)
     iv = max(iv, 1e-9)
     
     X, Y, Z, min_price, max_price, times = _compute_payoff_grid(
@@ -725,7 +765,7 @@ def visualize_neutral_3d(result, current_price, expiration_days, iv, key):
     fig = _create_3d_figure(X, Y, Z, f"3D Payoff for {key} (IV: {iv:.1%})", current_price)
     st.plotly_chart(fig, use_container_width=True, key=key)
 
-def visualize_volatility_3d(result, current_price, expiration_days, iv, key):
+def visualize_volatility_3d(result, current_price, expiration_days, iv, key, options, option_actions):
     raw_net = result["raw_net"]
     net_entry = result["net_cost"]
     num_contracts = result["num_contracts"]
@@ -754,7 +794,7 @@ def visualize_volatility_3d(result, current_price, expiration_days, iv, key):
             return (call_val + put_val) * 100 * num_contracts
         return 0.0
     
-    iv = _calibrate_iv(raw_net, current_price, expiration_days, strategy_value)
+    iv = _calibrate_iv(raw_net, current_price, expiration_days, strategy_value, options, option_actions)
     iv = max(iv, 1e-9)
     
     X, Y, Z, min_price, max_price, times = _compute_payoff_grid(
