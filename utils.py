@@ -400,6 +400,8 @@ def create_spread_matrix(options: list, strategy_func, num_contracts: int, commi
 # --- 3D VISUALIZATION ---
 # REPLACE the entire visualize_3d_payoff function with this one.
 
+# REPLACE the entire visualize_3d_payoff function with this corrected version.
+
 def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFAULT_IV, key=None):
     if not strategy_result or "strikes" not in strategy_result:
         st.warning("No valid strategy selected for visualization.")
@@ -408,7 +410,6 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
     net_cost = strategy_result.get("net_cost", 0)
     if net_cost is None: return
     
-    # Get the number of contracts from the result dictionary, defaulting to 1.
     num_contracts = strategy_result.get("num_contracts", 1)
 
     def black_scholes(S, K, T, r, sigma, option_type="call"):
@@ -430,39 +431,47 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
     strategy_key = key.lower() if key else ""
     r = 0.05
 
+    # Ensure strikes are sorted for consistent logic (k1 = lower, k2 = higher)
+    k1, k2 = (strikes[0], strikes[1]) if len(strikes) > 1 else (strikes[0], 0)
+    if k1 > k2 and k2 != 0: k1, k2 = k2, k1
+
     for i in range(len(times)):
         for j in range(len(prices)):
             price = X[i, j]
             T = (expiration_days - Y[i, j]) / 365.0
             position_value = 0.0
+            
+            # --- CORRECTED PAYOFF LOGIC ---
+            if "bull call spread" in strategy_key:
+                # Buy call at k1, Sell call at k2
+                position_value = (black_scholes(price, k1, T, r, iv, "call") - black_scholes(price, k2, T, r, iv, "call"))
+            elif "bull put spread" in strategy_key:
+                # Sell put at k2, Buy put at k1
+                position_value = (black_scholes(price, k2, T, r, iv, "put") - black_scholes(price, k1, T, r, iv, "put"))
+            elif "bear call spread" in strategy_key:
+                # Sell call at k1, Buy call at k2
+                position_value = (black_scholes(price, k2, T, r, iv, "call") - black_scholes(price, k1, T, r, iv, "call"))
+            elif "bear put spread" in strategy_key:
+                # Buy put at k2, Sell put at k1
+                position_value = (black_scholes(price, k2, T, r, iv, "put") - black_scholes(price, k1, T, r, iv, "put"))
+            
+            # Scale by 100 (per option contract) and by the number of contracts
+            if "spread" in strategy_key:
+                position_value *= 100 * num_contracts
 
-            # Butterfly and Condor are scaled via contract_ratios which already include num_contracts
-            if "butterfly" in strategy_key or "condor" in strategy_key:
+            # --- UNCHANGED LOGIC FOR OTHER STRATEGIES ---
+            elif "butterfly" in strategy_key or "condor" in strategy_key:
                 ratios = strategy_result.get("contract_ratios")
                 opt_type = "call" if "call" in strategy_key else "put"
                 if ratios:
-                    vals = [black_scholes(price, k, T, r, iv, opt_type) for k in strikes]
+                    vals = [black_scholes(price, k, T, r, iv, opt_type) for k in strategy_result["strikes"]]
                     position_value = sum(r * v for r, v in zip(ratios, vals)) * 100
-            
-            # Spreads must be scaled by num_contracts
-            elif "spread" in strategy_key:
-                k1, k2 = strikes
-                opt_type = "call" if "call" in strategy_key else "put"
-                val1 = black_scholes(price, k1, T, r, iv, opt_type)
-                val2 = black_scholes(price, k2, T, r, iv, opt_type)
-                # The order of strikes in the result dict determines the calculation
-                single_unit_value = (val1 - val2) * 100
-                position_value = single_unit_value * num_contracts
-
-            # Straddle and Strangle must be scaled by num_contracts
             elif "straddle" in strategy_key:
-                k1 = strikes[0]
-                single_unit_value = (black_scholes(price, k1, T, r, iv, "call") + black_scholes(price, k1, T, r, iv, "put")) * 100
-                position_value = single_unit_value * num_contracts
+                k = strikes[0]
+                position_value = (black_scholes(price, k, T, r, iv, "call") + black_scholes(price, k, T, r, iv, "put")) * 100 * num_contracts
             elif "strangle" in strategy_key:
                 put_k, call_k = strikes
-                single_unit_value = (black_scholes(price, call_k, T, r, iv, "call") + black_scholes(price, put_k, T, r, iv, "put")) * 100
-                position_value = single_unit_value * num_contracts
+                position_value = (black_scholes(price, call_k, T, r, iv, "call") + black_scholes(price, put_k, T, r, iv, "put")) * 100 * num_contracts
 
             Z[i, j] = position_value - net_cost
 
