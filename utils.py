@@ -9,6 +9,7 @@ from functools import reduce
 import plotly.graph_objects as go
 import logging
 from scipy.stats import norm
+from itertools import combinations, product
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -488,7 +489,47 @@ def create_spread_matrix(options: list, strategy_func, num_contracts: int, commi
         pd.DataFrame(ratio_matrix, columns=strike_labels, index=strike_labels),
         pd.DataFrame(breakeven_matrix, columns=strike_labels, index=strike_labels)
     )
+# ADD this entire function to utils.py
 
+def create_spread_table(options: list, strategy_func, num_contracts: int, commission_rate: float, is_debit: bool) -> pd.DataFrame:
+    strikes = sorted(options, key=lambda x: x["strike"])
+    combos = list(combinations(strikes, 2))
+    data = []
+
+    cost_label = "Net Cost" if is_debit else "Net Credit"
+
+    for combo in combos:
+        # Ensure correct order for debit vs credit spreads
+        opt1, opt2 = combo[0], combo[1]
+
+        # For debit spreads, we buy low (opt1) and sell high (opt2)
+        # For credit spreads, we sell low (opt1) and buy high (opt2)
+        # The calculation functions already handle the logic based on which option is passed first.
+
+        result = strategy_func(opt1, opt2, num_contracts, commission_rate)
+
+        if result and result.get("max_profit", 0) > 0:
+            cost_value = result.get("net_cost")
+            if cost_value is None: continue
+
+            # For credit spreads, net_cost is negative (a credit), so we use its absolute value for the ratio
+            ratio_cost = abs(cost_value)
+            ratio = ratio_cost / result["max_profit"] if result["max_profit"] > 0 else float('inf')
+
+            entry = {
+                "Strikes": f"{opt1['strike']:.2f} - {opt2['strike']:.2f}",
+                cost_label: cost_value,
+                "Max Profit": result["max_profit"],
+                "Max Loss": result["max_loss"],
+                "Cost-to-Profit Ratio": ratio,
+                "strikes": result["strikes"]
+            }
+            data.append(entry)
+
+    df = pd.DataFrame(data)
+    if not df.empty:
+        df = df.sort_values(by="Cost-to-Profit Ratio", ascending=True)
+    return df
 def create_complex_strategy_table(options: list, strategy_func, num_contracts: int, commission_rate: float, combo_size: int) -> pd.DataFrame:
     strikes = sorted(options, key=lambda x: x["strike"])
     combos = list(combinations(strikes, combo_size))
