@@ -449,6 +449,14 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
     num_contracts = strategy_result.get("num_contracts", 1)
 
     def black_scholes(S, K, T, r, sigma, option_type="call"):
+        try:
+            S = float(S)
+            K = float(K)
+            T = float(T)
+            r = float(r)
+            sigma = float(sigma)
+        except (TypeError, ValueError):
+            return 0.0
         if T <= 1e-9: return max(0, S - K) if option_type == "call" else max(0, K - S)
         with np.errstate(divide='ignore', invalid='ignore'):
             d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
@@ -517,7 +525,7 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
 
     # Now compute the grid with calibrated IV
     plot_range_pct = st.session_state.get("plot_range_pct", 0.3)
-    scale_factor = 1e9  # Scale down large payoff values for visualization
+    # Removed scaling factor to show actual profit/loss values
 
     prices = np.linspace(max(0.1, current_price * (1 - plot_range_pct)), current_price * (1 + plot_range_pct), 50)
     times = np.linspace(0, expiration_days, 20)
