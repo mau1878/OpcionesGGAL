@@ -47,7 +47,10 @@ st.session_state.num_contracts = st.sidebar.number_input("Número de contratos",
 st.session_state.commission_rate = st.sidebar.number_input("Comisión (%)", min_value=0.0, value=0.5, step=0.1) / 100
 st.session_state.iv = st.sidebar.number_input("Volatilidad Implícita (%)", min_value=0.0, value=utils.DEFAULT_IV * 100, step=1.0) / 100
 strike_percentage = st.sidebar.slider("Rango de Strikes (% del precio actual)", 0.0, 100.0, 20.0) / 100
+# ADD the following lines to the sidebar in 1_OpcionesGGAL.py, after the existing inputs in st.sidebar.header("Configuración de Análisis")
 
+st.session_state.plot_range_pct = st.sidebar.slider("Rango de Precios en Gráficos 3D (% del precio actual)", 10.0, 200.0, 30.0) / 100
+st.session_state.risk_free_rate = st.sidebar.number_input("Tasa Libre de Riesgo (%)", min_value=0.0, value=50.0, step=1.0) / 100
 # --- Filter options based on inputs and store in session_state ---
 min_strike = st.session_state.current_price * (1 - strike_percentage)
 max_strike = st.session_state.current_price * (1 + strike_percentage)

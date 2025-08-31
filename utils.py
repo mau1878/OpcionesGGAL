@@ -404,6 +404,8 @@ def create_spread_matrix(options: list, strategy_func, num_contracts: int, commi
 
 # DELETE the old visualize_3d_payoff function and REPLACE it with this one.
 
+# REPLACE the entire visualize_3d_payoff function in utils.py with this corrected and enhanced version.
+
 def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFAULT_IV, key=None):
     if not strategy_result or "strikes" not in strategy_result:
         st.warning("No valid strategy selected for visualization.")
@@ -425,13 +427,15 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
                 val = K * np.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
         return np.nan_to_num(val)
 
-    prices = np.linspace(max(0.1, current_price * 0.7), current_price * 1.3, 50)
+    # Use user-configurable plot range
+    plot_range_pct = st.session_state.get("plot_range_pct", 0.3)  # Default 30% if not set
+    prices = np.linspace(max(0.1, current_price * (1 - plot_range_pct)), current_price * (1 + plot_range_pct), 50)
     times = np.linspace(0, expiration_days, 20)
     X, Y = np.meshgrid(prices, times)
     Z = np.zeros_like(X)
     
     strategy_key = key.lower() if key else ""
-    r = 0.05
+    r = st.session_state.get("risk_free_rate", 0.50)  # Default 50% if not set
 
     for i in range(len(times)):
         for j in range(len(prices)):
@@ -439,19 +443,17 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
             T = (expiration_days - Y[i, j]) / 365.0
             position_value = 0.0
             
-            # --- COMPLETELY REWRITTEN AND CORRECTED LOGIC ---
-            
             if "spread" in strategy_key:
                 strikes = strategy_result["strikes"]
                 k1, k2 = strikes[0], strikes[1]
                 
-                if "bull call" in strategy_key: # Long Call Spread
+                if "bull call" in strategy_key:  # Long Call Spread
                     position_value = (black_scholes(price, k1, T, r, iv, "call") - black_scholes(price, k2, T, r, iv, "call"))
-                elif "bull put" in strategy_key: # Short Put Spread
-                    position_value = (black_scholes(price, k2, T, r, iv, "put") - black_scholes(price, k1, T, r, iv, "put"))
-                elif "bear call" in strategy_key: # Short Call Spread
-                    position_value = (black_scholes(price, k1, T, r, iv, "call") - black_scholes(price, k2, T, r, iv, "call"))
-                elif "bear put" in strategy_key: # Long Put Spread
+                elif "bull put" in strategy_key:  # Short Put Spread
+                    position_value = (black_scholes(price, k1, T, r, iv, "put") - black_scholes(price, k2, T, r, iv, "put"))  # Fixed sign: long low (k1), short high (k2)
+                elif "bear call" in strategy_key:  # Short Call Spread
+                    position_value = (black_scholes(price, k2, T, r, iv, "call") - black_scholes(price, k1, T, r, iv, "call"))  # Fixed sign: long high (k2), short low (k1)
+                elif "bear put" in strategy_key:  # Long Put Spread
                     position_value = (black_scholes(price, k2, T, r, iv, "put") - black_scholes(price, k1, T, r, iv, "put"))
                 
                 position_value *= 100 * num_contracts
@@ -479,12 +481,29 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
 
             Z[i, j] = position_value - net_cost
 
-    payoff_surface = go.Surface(z=Z, x=X, y=Y, colorscale='RdYlGn', cmin=Z.min(), cmax=Z.max(),
+    # Force Z range to include 0 with margin
+    z_min = min(Z.min(), 0)
+    z_max = max(Z.max(), 0)
+    z_margin = 0.1 * (z_max - z_min) if z_max - z_min > 0 else 1.0  # Small margin if flat
+    z_min -= z_margin
+    z_max += z_margin
+
+    payoff_surface = go.Surface(z=Z, x=X, y=Y, colorscale='RdYlGn', cmin=z_min, cmax=z_max,
                                 colorbar=dict(title='Profit/Loss'))
+
+    # Breakeven plane (blue) at Z=0
     breakeven_plane = go.Surface(z=np.zeros_like(X), x=X, y=Y, opacity=0.7, showscale=False,
                                  colorscale=[[0, '#0000FF'], [1, '#0000FF']])
-    fig = go.Figure(data=[payoff_surface, breakeven_plane])
+
+    # Current price plane (red) at X=current_price
+    yy, zz = np.meshgrid([Y.min(), Y.max()], [z_min, z_max])
+    xx = np.full_like(yy, current_price)
+    current_price_plane = go.Surface(x=xx, y=yy, z=zz, opacity=0.7, showscale=False,
+                                     colorscale=[[0, '#FF0000'], [1, '#FF0000']])
+
+    fig = go.Figure(data=[payoff_surface, breakeven_plane, current_price_plane])
     fig.update_layout(title=f"Strategy Value Over Time: {key.replace('_', ' ').title()}",
                       scene=dict(xaxis_title='Underlying Price (ARS)', yaxis_title='Days Elapsed',
-                                 zaxis_title='Profit/Loss (ARS)'))
+                                 zaxis_title='Profit/Loss (ARS)',
+                                 zaxis=dict(range=[z_min, z_max])))
     st.plotly_chart(fig, use_container_width=True, key=f"chart_{key}")
