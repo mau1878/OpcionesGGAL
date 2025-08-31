@@ -437,11 +437,11 @@ def create_spread_matrix(options: list, strategy_func, num_contracts: int, commi
 # REPLACE the entire visualize_3d_payoff function in utils.py with this version that uses the correct variable name in the Z assignment.
 
 def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFAULT_IV, key=None):
-    if not strategy_result or "strikes" not in strategy_result:
+    if not strategy_result or "Strikes" not in strategy_result:
         st.warning("No valid strategy selected for visualization.")
         return
 
-    net_debit = strategy_result.get("net_cost", 0)
+    net_debit = strategy_result.get("Net Cost", 0)
     net_credit = strategy_result.get("net_credit", 0)
     net_entry = net_debit - net_credit
     if net_entry is None: return
