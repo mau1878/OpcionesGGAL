@@ -508,9 +508,12 @@ def _create_3d_figure(X, Y, Z, title, current_price):
             zaxis_title="Profit / Loss",
             camera=dict(eye=dict(x=1.5, y=1.5, z=1.5))
         ),
-        autosize=True,
+        autosize=False,  # Disable autosize to use custom dimensions
+        width=800,      # Set desired width in pixels
+        height=600,     # Set desired height in pixels
         margin=dict(l=65, r=50, b=65, t=90),
     )
+
     return fig
 
 def black_scholes(S, K, T, r, sigma, option_type="call"):
