@@ -547,6 +547,7 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
         for j in range(len(prices)):
             price = X[i, j]
             T = (expiration_days - Y[i, j]) / 365.0
+            T = max(T, 1e-9)  # Ensure T is always positive to avoid division by zero
             Z[i, j] = (strategy_value(price, T, iv) - net_entry) / scale_factor  # Scale values
 
     net_entry_scaled = net_entry / scale_factor
