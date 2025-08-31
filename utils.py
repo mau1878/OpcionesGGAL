@@ -321,10 +321,12 @@ def create_spread_table(options, strategy_func, num_contracts, commission_rate, 
 
 def create_complex_strategy_table(options, strategy_func, num_contracts, commission_rate, num_legs):
     data = []
+    if len(options) < num_legs:
+        return pd.DataFrame()
     for combo in combinations(options, num_legs):
         combo = sorted(combo, key=lambda o: o["strike"])
         result = strategy_func(*combo, num_contracts, commission_rate)
-        if result:
+        if result and all(k in result for k in ["net_cost", "max_profit", "max_loss", "strikes"]):
             strikes = tuple(result["strikes"])
             data.append({
                 "net_cost": result["net_cost"],
@@ -335,7 +337,10 @@ def create_complex_strategy_table(options, strategy_func, num_contracts, commiss
     if not data:
         return pd.DataFrame()
     df = pd.DataFrame(data)
-    df.set_index("strikes", inplace=True)
+    # Set MultiIndex with strike names
+    strike_labels = [f"Strike {i+1}" for i in range(num_legs)]
+    df.set_index(pd.MultiIndex.from_tuples(df["strikes"], names=strike_labels), inplace=True)
+    df.drop(columns=["strikes"], inplace=True)
     return df
 
 def create_vol_strategy_table(calls, puts, strategy_func, num_contracts, commission_rate):
