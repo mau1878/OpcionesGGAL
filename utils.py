@@ -114,19 +114,37 @@ def calculate_bull_call_spread(long_opt, short_opt, num_contracts, commission_ra
 
 
 def calculate_bull_put_spread(short_opt, long_opt, num_contracts, commission_rate):
-    if short_opt["strike"] >= long_opt["strike"]: return None
+    # For a Bull Put, you sell a higher strike and buy a lower strike.
+    if short_opt["strike"] <= long_opt["strike"]:
+        return None
+
     short_price = get_strategy_price(short_opt, "sell")
     long_price = get_strategy_price(long_opt, "buy")
-    if any(p is None for p in [short_price, long_price]): return None
+    if any(p is None for p in [short_price, long_price]):
+        return None
 
+    # You receive a credit because the higher strike put you sell is worth more.
     base_credit = (short_price - long_price) * num_contracts * 100
+
+    # If the credit is negative (a debit), it's not a valid bull put spread.
+    if base_credit <= 0:
+        return None
+
     total_fees = calculate_fees(abs(base_credit), commission_rate)
     net_credit = base_credit - total_fees
 
+    # Your max profit is the net credit you receive.
     max_profit = net_credit
-    max_loss = (long_opt["strike"] - short_opt["strike"]) * num_contracts * 100 - max_profit
-    return {"net_cost": -net_credit, "max_profit": max_profit, "max_loss": max_loss,
-            "strikes": [short_opt["strike"], long_opt["strike"]]}
+
+    # Your max loss is the difference in strikes minus the credit received.
+    max_loss = (short_opt["strike"] - long_opt["strike"]) * num_contracts * 100 - net_credit
+
+    return {
+        "net_cost": -net_credit,  # Stored as negative cost
+        "max_profit": max_profit,
+        "max_loss": max_loss,
+        "strikes": [long_opt["strike"], short_opt["strike"]]  # Convention: long, short
+    }
 
 
 def calculate_bear_call_spread(short_opt, long_opt, num_contracts, commission_rate):
@@ -244,21 +262,27 @@ def calculate_strangle(put_opt, call_opt, num_contracts, commission_rate):
 
 
 # --- TABLE CREATION ---
-def create_spread_table(options: list, strategy_func, num_contracts: int, commission_rate: float,
-                        is_debit: bool) -> pd.DataFrame:
+def create_spread_table(options: list, strategy_func, num_contracts: int, commission_rate: float, is_debit: bool) -> pd.DataFrame:
     strikes = sorted(options, key=lambda x: x["strike"])
     combos = list(combinations(strikes, 2))
     data = []
     cost_label = "Net Cost" if is_debit else "Net Credit"
 
-    for opt1, opt2 in combos:  # opt1.strike < opt2.strike
+    for opt1, opt2 in combos:  # In combos, opt1.strike is always < opt2.strike
         func_name = strategy_func.__name__
         result, strike_label = (None, "")
 
-        if "bear_put" in func_name:
-            result = strategy_func(opt2, opt1, num_contracts, commission_rate)
+        # --- FIX: Correctly assign long/short legs based on strategy ---
+        if "bull_put" in func_name:
+            # Sell higher strike (opt2), Buy lower strike (opt1)
+            result = strategy_func(short_opt=opt2, long_opt=opt1, num_contracts=num_contracts, commission_rate=commission_rate)
+            strike_label = f"{opt1['strike']:.2f} - {opt2['strike']:.2f}"
+        elif "bear_put" in func_name:
+            # Buy higher strike (opt2), Sell lower strike (opt1)
+            result = strategy_func(long_opt=opt2, short_opt=opt1, num_contracts=num_contracts, commission_rate=commission_rate)
             strike_label = f"{opt2['strike']:.2f} - {opt1['strike']:.2f}"
-        else:
+        else: # bull_call, bear_call
+            # For calls, opt1 is long/short and opt2 is the other leg
             result = strategy_func(opt1, opt2, num_contracts, commission_rate)
             strike_label = f"{opt1['strike']:.2f} - {opt2['strike']:.2f}"
 
@@ -267,9 +291,11 @@ def create_spread_table(options: list, strategy_func, num_contracts: int, commis
             if any(v is None for v in [cost, profit, loss]): continue
 
             if is_debit:
+                # For debit spreads, ratio is Cost / Profit
                 ratio = cost / profit if profit > 0 else float('inf')
                 display_cost = cost
             else:  # Credit Spread
+                # For credit spreads, ratio is Risk (Max Loss) / Reward (Max Profit)
                 ratio = loss / profit if profit > 0 else float('inf')
                 display_cost = -cost  # Show credit as a positive number
 
