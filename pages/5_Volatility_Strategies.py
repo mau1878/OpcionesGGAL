@@ -21,7 +21,7 @@ with tab1:
         st.dataframe(styled_df)
     else:
         st.dataframe(df)
-        st.warning("No hay datos disponibles para Long Straddle.")
+        st.warning("No hay datos disponibles para Long Straddle. Verifique si hay strikes coincidentes para calls y puts en el rango seleccionado.")
     if not df.empty:
         options = df.index
         selected = st.selectbox("Selecciona una combinación para visualizar", options, key="straddle_select")
@@ -36,13 +36,14 @@ with tab1:
 
 with tab2:
     st.subheader("Long Strangle")
-    df = utils.create_vol_strategy_table(calls, puts, utils.calculate_strangle, st.session_state.num_contracts, st.session_state.commission_rate)
+    # FIX: Swapped to product(puts, calls) to match calculate_strangle's put < call check
+    df = utils.create_vol_strategy_table(puts, calls, utils.calculate_strangle, st.session_state.num_contracts, st.session_state.commission_rate)
     if not df.empty:
         styled_df = df.style.format({"net_cost": "{:.2f}", "max_loss": "{:.2f}", "lower_breakeven": "{:.2f}", "upper_breakeven": "{:.2f}"})
         st.dataframe(styled_df)
     else:
         st.dataframe(df)
-        st.warning("No hay datos disponibles para Long Strangle.")
+        st.warning("No hay datos disponibles para Long Strangle. Verifique si hay puts con strikes inferiores a calls en el rango seleccionado.")
     if not df.empty:
         options = df.index
         selected = st.selectbox("Selecciona una combinación para visualizar", options, key="strangle_select")

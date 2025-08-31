@@ -31,7 +31,6 @@ st.caption(f"Última actualización: {st.session_state.last_updated}")
 # --- Sidebar for Inputs ---
 st.sidebar.header("Configuración de Análisis")
 
-# Filter expirations >= today
 expirations = sorted(list(set(o["expiration"] for o in ggal_options if o["expiration"] is not None and o["expiration"] >= date.today())))
 st.session_state.selected_exp = st.sidebar.selectbox(
     "Selecciona la fecha de vencimiento",
@@ -45,9 +44,8 @@ st.sidebar.caption("Las tarifas son estimaciones; las reales pueden variar.")
 st.session_state.iv = st.sidebar.number_input("Volatilidad Implícita (%)", min_value=0.0, value=utils.DEFAULT_IV * 100, step=1.0) / 100
 strike_percentage = st.sidebar.slider("Rango de Strikes (% del precio actual)", 0.0, 100.0, 20.0) / 100
 st.session_state.plot_range_pct = st.sidebar.slider("Rango de Precios en Gráficos 3D (% del precio actual)", 10.0, 200.0, 30.0) / 100
-st.session_state.risk_free_rate = st.sidebar.number_input("Tasa Libre de Riesgo (%)", min_value=0.0, value=50.0, step=1.0) / 100
+st.session_state.risk_free_rate = st.sidebar.number_input("Tasa Libre de Riesgo (%)", min_value=0.0, value=10.0, step=1.0) / 100  # Reduced to 10% default
 
-# --- Filter options based on inputs and store in session_state ---
 min_strike = st.session_state.current_price * (1 - strike_percentage)
 max_strike = st.session_state.current_price * (1 + strike_percentage)
 
@@ -55,7 +53,6 @@ st.session_state.filtered_calls = [o for o in ggal_options if o["type"] == "call
 st.session_state.filtered_puts = [o for o in ggal_options if o["type"] == "put" and o["expiration"] == st.session_state.selected_exp and min_strike <= o["strike"] <= max_strike]
 st.session_state.expiration_days = max(1, (st.session_state.selected_exp - date.today()).days)
 
-# Add UI feedback for empty filters
 if not st.session_state.filtered_calls and not st.session_state.filtered_puts:
     st.warning("No hay opciones disponibles en el rango de strikes seleccionado para esta fecha de vencimiento.")
 elif not st.session_state.filtered_calls:

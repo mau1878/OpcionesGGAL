@@ -12,7 +12,6 @@ from scipy.optimize import minimize_scalar
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
-# --- CONFIGURATION ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 STOCK_URL = "https://data912.com/live/arg_stocks"
@@ -20,7 +19,6 @@ OPTIONS_URL = "https://data912.com/live/arg_options"
 DEFAULT_IV = 0.30
 MIN_GAP = 0.01
 
-# --- DATE & EXPIRATION HELPERS ---
 def get_third_friday(year: int, month: int) -> date:
     try:
         first_day = date(year, month, 1)
@@ -31,28 +29,23 @@ def get_third_friday(year: int, month: int) -> date:
 
 year = date.today().year
 EXPIRATION_MAP_2025 = {
-    "E": get_third_friday(year, 1), "EN": get_third_friday(year, 1),  # Enero/Jan
-    "F": get_third_friday(year, 2), "FE": get_third_friday(year, 2),  # Febrero/Feb
-    "M": get_third_friday(year, 3), "MZ": get_third_friday(year, 3),  # Marzo/Mar
-    "A": get_third_friday(year, 4), "AB": get_third_friday(year, 4),  # Abril/Apr
-    "MY": get_third_friday(year, 5),  # Mayo/May
-    "J": get_third_friday(year, 6), "JN": get_third_friday(year, 6),  # Junio/Jun
-    "JL": get_third_friday(year, 7),  # Julio/Jul
-    "AG": get_third_friday(year, 8),  # Agosto/Aug
-    "S": get_third_friday(year, 9), "SE": get_third_friday(year, 9),  # Septiembre/Sep
-    "O": get_third_friday(year, 10), "OC": get_third_friday(year, 10),  # Octubre/Oct
-    "N": get_third_friday(year, 11), "NO": get_third_friday(year, 11),  # Noviembre/Nov
-    "D": get_third_friday(year, 12), "DI": get_third_friday(year, 12),  # Diciembre/Dec
+    "E": get_third_friday(year, 1), "EN": get_third_friday(year, 1),
+    "F": get_third_friday(year, 2), "FE": get_third_friday(year, 2),
+    "M": get_third_friday(year, 3), "MZ": get_third_friday(year, 3),
+    "A": get_third_friday(year, 4), "AB": get_third_friday(year, 4),
+    "MY": get_third_friday(year, 5),
+    "J": get_third_friday(year, 6), "JN": get_third_friday(year, 6),
+    "JL": get_third_friday(year, 7),
+    "AG": get_third_friday(year, 8),
+    "S": get_third_friday(year, 9), "SE": get_third_friday(year, 9),
+    "O": get_third_friday(year, 10), "OC": get_third_friday(year, 10),
+    "N": get_third_friday(year, 11), "NO": get_third_friday(year, 11),
+    "D": get_third_friday(year, 12), "DI": get_third_friday(year, 12),
 }
 
-# --- DATA FETCHING & PARSING ---
 def fetch_data(url: str) -> list:
     session = requests.Session()
-    retry_strategy = Retry(
-        total=3,
-        backoff_factor=1,
-        status_forcelist=[500, 502, 503, 504]
-    )
+    retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
     adapter = HTTPAdapter(max_retries=retry_strategy)
     session.mount("https://", adapter)
     try:
@@ -568,7 +561,9 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
         return
 
     net_entry = strategy_result.get("net_cost", 0)
-    raw_net = strategy_result.get("raw_net", net_entry)
+    # Use mid-price (average of bid/ask) for raw_net to avoid fee distortion
+    mid_price = sum(get_strategy_price(opt, "buy" if "buy" in key.lower() else "sell") for opt in strategy_result.get("strikes", []) if get_strategy_price(opt, "buy" or "sell")) / len(strategy_result.get("strikes", [1]))
+    raw_net = mid_price * 100 * strategy_result.get("num_contracts", 1) if mid_price else net_entry
     if net_entry is None: return
 
     num_contracts = strategy_result.get("num_contracts", 1)
@@ -602,7 +597,7 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
     def strategy_value(price, T, sigma):
         position_value = 0.0
         strategy_key = key.lower() if key else ""
-        r = st.session_state.get("risk_free_rate", 0.50)
+        r = min(st.session_state.get("risk_free_rate", 0.10), 1.0)  # Cap at 100% to prevent extremes
 
         if "spread" in strategy_key:
             strikes = strategy_result["strikes"]
@@ -641,9 +636,9 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
 
         return position_value
 
-    # Calibrate IV
+    # Calibrate IV with mid-price
     strategy_key = key.lower() if key else ""
-    r = st.session_state.get("risk_free_rate", 0.50)
+    r = min(st.session_state.get("risk_free_rate", 0.10), 1.0)
     def objective(sigma):
         if sigma <= 0: return float('inf')
         return abs(strategy_value(current_price, expiration_days / 365.0, sigma) - raw_net)
@@ -668,8 +663,8 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
     X, Y = np.meshgrid(prices, times)
     Z = np.zeros_like(X)
 
-    max_profit = strategy_result.get("max_profit", 0)
-    scale_factor = max_profit if max_profit > 0 else abs(net_entry) if abs(net_entry) > 0 else 1
+    max_profit = strategy_result.get("max_profit", 1.0)  # Default to 1 to avoid division by zero
+    scale_factor = max_profit if max_profit > 0 else abs(net_entry) if abs(net_entry) > 0 else 1.0
     if "straddle" in strategy_key or "strangle" in strategy_key:
         scale_factor *= 1.5
 
@@ -680,7 +675,6 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
             T = max(T, 1e-9)
             Z[i, j] = (strategy_value(price, T, iv) - net_entry) / scale_factor
 
-    # Plotting
     fig = go.Figure(data=[go.Surface(z=Z, x=X, y=Y)])
     fig.update_layout(
         title="3D Payoff Visualization",
