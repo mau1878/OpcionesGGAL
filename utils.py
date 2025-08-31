@@ -465,12 +465,13 @@ def _create_3d_figure(X, Y, Z, title, current_price):
     )
     
     # Red plane at x=current_price
-    x_current = np.full_like(X, current_price)
-    z_current = np.linspace(z_min, z_max, X.shape[0])
-    x_current, y_current = np.meshgrid(np.array([current_price]), Y[0])
-    z_current = np.tile(z_current[:, np.newaxis], (1, X.shape[1]))
+    z_current = np.linspace(z_min, z_max, len(Y[:, 0]))
+    y_current = Y[:, 0]
+    x_current = np.full_like(z_current, current_price)
+    X_current, Z_current = np.meshgrid([current_price, current_price], z_current)
+    Y_current = np.tile(y_current[:, np.newaxis], (1, 2))
     red_plane = go.Surface(
-        x=x_current, y=Y, z=z_current,
+        x=X_current, y=Y_current, z=Z_current,
         colorscale=[[0, 'rgba(255, 0, 0, 0.2)'], [1, 'rgba(255, 0, 0, 0.2)']],
         showscale=False,
         name="Current GGAL Price"
