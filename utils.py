@@ -434,13 +434,17 @@ def create_spread_matrix(options: list, strategy_func, num_contracts: int, commi
 
 # REPLACE the entire visualize_3d_payoff function in utils.py with this corrected and enhanced version that includes IV calibration.
 
+# REPLACE the entire visualize_3d_payoff function in utils.py with this version that uses the correct variable name in the Z assignment.
+
 def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFAULT_IV, key=None):
     if not strategy_result or "strikes" not in strategy_result:
         st.warning("No valid strategy selected for visualization.")
         return
 
-    net_cost = strategy_result.get("net_cost", 0)
-    if net_cost is None: return
+    net_debit = strategy_result.get("net_cost", 0)
+    net_credit = strategy_result.get("net_credit", 0)
+    net_entry = net_debit - net_credit
+    if net_entry is None: return
     
     num_contracts = strategy_result.get("num_contracts", 1)
 
@@ -496,24 +500,14 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
 
         return position_value
 
-    # Calibrate IV to match net_cost at current price and initial time
+    # Calibrate IV to minimize |strategy_value - net_entry| at current price and initial time
     strategy_key = key.lower() if key else ""
     r = st.session_state.get("risk_free_rate", 0.50)
-    # REPLACE the calibration part in visualize_3d_payoff function in utils.py with this improved version using minimize_scalar for |objective|.
-
-    # Calibrate IV to minimize |strategy_value - net_cost| at current price and initial time
-    net_debit = strategy_result.get("net_cost", 0)
-    net_credit = strategy_result.get("net_credit", 0)
-    net_entry = net_debit - net_credit
-
-    # Calibrate IV to minimize |strategy_value - net_entry|
     def objective(sigma):
         if sigma <= 0: return float('inf')
         return strategy_value(current_price, expiration_days / 365.0, sigma) - net_entry
 
     try:
-        # REPLACE the minimize_scalar line in visualize_3d_payoff in utils.py to use method='bounded'.
-
         result = minimize_scalar(lambda sigma: abs(objective(sigma)), bounds=(0.01, 10.0), method='bounded', tol=1e-5)
         calibrated_iv = result.x
         if calibrated_iv > 0 and not np.isnan(calibrated_iv) and result.success:
@@ -532,7 +526,7 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
         for j in range(len(prices)):
             price = X[i, j]
             T = (expiration_days - Y[i, j]) / 365.0
-            Z[i, j] = position_value - net_entry
+            Z[i, j] = strategy_value(price, T, iv) - net_entry
 
     # Force Z range to include 0 with margin
     z_min = min(Z.min(), 0)
