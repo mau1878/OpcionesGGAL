@@ -24,16 +24,20 @@ with tab1:
     st.subheader("Visualización 3D")
     if not detailed_df_call.empty:
         selected = st.selectbox("Selecciona una combinación para visualizar", detailed_df_call.index, key="bcs_select")
-        row = detailed_df_call.loc[selected]
-        result = {
-            "net_cost": row["Net Cost"],
-            "max_profit": row["Max Profit"],
-            "max_loss": row["Max Loss"],
-            "strikes": list(selected),
-            "num_contracts": st.session_state.num_contracts
-        }
-        if result:
-            utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Bull Call Spread")
+        if isinstance(selected, tuple) and len(selected) == 2:
+            long_strike, short_strike = selected
+            row = detailed_df_call.loc[selected]
+            result = {
+                "net_cost": row["Net Cost"],
+                "max_profit": row["Max Profit"],
+                "max_loss": row["Max Loss"],
+                "strikes": [long_strike, short_strike],
+                "num_contracts": st.session_state.num_contracts
+            }
+            if result:
+                utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Bull Call Spread")
+        else:
+            st.warning("Selección inválida. Por favor, seleccione una combinación válida.")
 
 
 with tab2:
@@ -47,13 +51,17 @@ with tab2:
     st.subheader("Visualización 3D")
     if not detailed_df_put.empty:
         selected = st.selectbox("Selecciona una combinación para visualizar", detailed_df_put.index, key="bps_select")
-        row = detailed_df_put.loc[selected]
-        result = {
-            "net_cost": -row["Net Credit"],
-            "max_profit": row["Max Profit"],
-            "max_loss": row["Max Loss"],
-            "strikes": list(selected),
-            "num_contracts": st.session_state.num_contracts
-        }
-        if result:
-            utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Bull Put Spread")
+        if isinstance(selected, tuple) and len(selected) == 2:
+            long_strike, short_strike = selected
+            row = detailed_df_put.loc[selected]
+            result = {
+                "net_cost": -row["Net Credit"],
+                "max_profit": row["Max Profit"],
+                "max_loss": row["Max Loss"],
+                "strikes": [long_strike, short_strike],
+                "num_contracts": st.session_state.num_contracts
+            }
+            if result:
+                utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Bull Put Spread")
+        else:
+            st.warning("Selección inválida. Por favor, seleccione una combinación válida.")

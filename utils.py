@@ -264,51 +264,43 @@ def calculate_strangle(put_opt, call_opt, num_contracts, commission_rate):
 
 
 # --- TABLE CREATION ---
-def create_spread_table(options: list, strategy_func, num_contracts: int, commission_rate: float, is_debit: bool) -> pd.DataFrame:
-    strikes = sorted(options, key=lambda x: x["strike"])
-    combos = list(combinations(strikes, 2))
+def create_spread_table(options, strategy_func, num_contracts, commission_rate, is_debit):
     data = []
-    cost_label = "Net Cost" if is_debit else "Net Credit"
-
-    for opt1, opt2 in combos:  # In combos, opt1.strike is always < opt2.strike
-        func_name = strategy_func.__name__
-        result, strike_label = (None, "")
-
-        # --- FIX: Correctly assign long/short legs based on strategy ---
-        if "bull_put" in func_name:
-            # Sell higher strike (opt2), Buy lower strike (opt1)
-            result = strategy_func(short_opt=opt2, long_opt=opt1, num_contracts=num_contracts, commission_rate=commission_rate)
-            strike_label = f"{opt1['strike']:.2f} - {opt2['strike']:.2f}"
-        elif "bear_put" in func_name:
-            # Buy higher strike (opt2), Sell lower strike (opt1)
-            result = strategy_func(long_opt=opt2, short_opt=opt1, num_contracts=num_contracts, commission_rate=commission_rate)
-            strike_label = f"{opt2['strike']:.2f} - {opt1['strike']:.2f}"
-        else: # bull_call, bear_call
-            # For calls, opt1 is long/short and opt2 is the other leg
-            result = strategy_func(opt1, opt2, num_contracts, commission_rate)
-            strike_label = f"{opt1['strike']:.2f} - {opt2['strike']:.2f}"
-
-        if result:
-            cost, profit, loss = result.get("net_cost"), result.get("max_profit"), result.get("max_loss")
-            if any(v is None for v in [cost, profit, loss]): continue
-
-            if is_debit:
-                # For debit spreads, ratio is Cost / Profit
-                ratio = cost / profit if profit > 0 else float('inf')
-                display_cost = cost
-            else:  # Credit Spread
-                # For credit spreads, ratio is Risk (Max Loss) / Reward (Max Profit)
-                ratio = loss / profit if profit > 0 else float('inf')
-                display_cost = -cost  # Show credit as a positive number
-
+    for long_opt, short_opt in combinations(options, 2):
+        if strategy_func.__name__ == "calculate_bull_call_spread" and long_opt["strike"] >= short_opt["strike"]:
+            continue
+        if strategy_func.__name__ == "calculate_bull_put_spread" and long_opt["strike"] >= short_opt["strike"]:
+            continue
+        if strategy_func.__name__ == "calculate_bear_call_spread" and long_opt["strike"] <= short_opt["strike"]:
+            continue
+        if strategy_func.__name__ == "calculate_bear_put_spread" and long_opt["strike"] <= short_opt["strike"]:
+            continue
+        
+        # Determine which option is long and which is short based on strategy
+        if strategy_func.__name__ in ["calculate_bull_call_spread", "calculate_bear_put_spread"]:
+            result = strategy_func(long_opt=long_opt, short_opt=short_opt, num_contracts=num_contracts, commission_rate=commission_rate)
+        elif strategy_func.__name__ in ["calculate_bull_put_spread", "calculate_bear_call_spread"]:
+            result = strategy_func(short_opt=long_opt, long_opt=short_opt, num_contracts=num_contracts, commission_rate=commission_rate)
+        
+        if result and "net_cost" in result and result["net_cost"] is not None:
+            cost = result["net_cost"]
+            max_profit = result["max_profit"]
+            max_loss = result["max_loss"]
+            cost_to_profit = abs(cost / max_profit) if max_profit != 0 else float('inf')
             data.append({
-                "strikes": strike_label, cost_label: display_cost, "Max Profit": profit,
-                "Max Loss": loss, "Cost-to-Profit Ratio": ratio, "strikes": result["strikes"]
+                "Long Strike": long_opt["strike"],
+                "Short Strike": short_opt["strike"],
+                "Net Cost" if is_debit else "Net Credit": abs(cost),
+                "Max Profit": max_profit,
+                "Max Loss": max_loss,
+                "Cost-to-Profit Ratio": cost_to_profit
             })
-
+    
+    if not data:
+        return pd.DataFrame()
+    
     df = pd.DataFrame(data)
-    if not df.empty:
-        df = df.sort_values(by="Cost-to-Profit Ratio", ascending=True)
+    df.set_index(["Long Strike", "Short Strike"], inplace=True)
     return df
 
 
