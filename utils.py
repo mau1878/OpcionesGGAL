@@ -457,7 +457,8 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
             sigma = float(sigma)
         except (TypeError, ValueError):
             return 0.0
-        if T <= 1e-9: return max(0, S - K) if option_type == "call" else max(0, K - S)
+        if T <= 1e-9 or sigma <= 1e-9:
+            return max(0, S - K) if option_type == "call" else max(0, K - S)
         with np.errstate(divide='ignore', invalid='ignore'):
             d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
             d2 = d1 - sigma * np.sqrt(T)
