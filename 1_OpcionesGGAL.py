@@ -31,12 +31,18 @@ st.caption(f"Última actualización: {st.session_state.last_updated}")
 # --- Sidebar for Inputs ---
 st.sidebar.header("Configuración de Análisis")
 
-expirations = sorted(list(set(o["expiration"] for o in ggal_options if o["expiration"] is not None and o["expiration"] >= date.today())))
+expirations = sorted(list(set(
+    o["expiration"] for o in ggal_options 
+    if o["expiration"] is not None and o["expiration"] >= date.today()
+)))
+
 st.session_state.selected_exp = st.sidebar.selectbox(
     "Selecciona la fecha de vencimiento",
     expirations,
+    index=1 if len(expirations) > 1 else 0,  # fallback to first if only one date
     format_func=lambda x: x.strftime("%Y-%m-%d")
 )
+
 
 st.session_state.num_contracts = st.sidebar.number_input("Número de contratos", min_value=1, value=1, step=1)
 st.session_state.commission_rate = st.sidebar.number_input("Comisión (%)", min_value=0.0, value=0.5, step=0.1) / 100
