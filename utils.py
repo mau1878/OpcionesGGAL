@@ -535,7 +535,7 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
     # Debug prints
     print(f"Payoff surface Z min: {Z.min()}, max: {Z.max()}")
     print(f"Net entry scaled: {net_entry_scaled}")
-            Z[i, j] = (strategy_value(price, T, iv) - net_entry) / scale_factor  # Scale values for visualization
+    Z[i, j] = (strategy_value(price, T, iv) - net_entry) / scale_factor  # Scale values for visualization
 
     # Force Z range to include 0 with margin
     z_min = min(Z.min(), 0)
