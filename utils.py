@@ -460,7 +460,9 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
         if T <= 1e-9 or sigma <= 1e-9:
             return max(0, S - K) if option_type == "call" else max(0, K - S)
         with np.errstate(divide='ignore', invalid='ignore'):
-            d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
+            epsilon = 1e-12
+            denom = sigma * np.sqrt(T) + epsilon
+            d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / denom
             d2 = d1 - sigma * np.sqrt(T)
             if option_type == "call":
                 val = S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
