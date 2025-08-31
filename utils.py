@@ -533,6 +533,8 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
     except:
         pass  # Use original IV if optimization fails
 
+    iv = max(iv, 1e-9) # Ensure iv is always positive
+
     # Now compute the grid with calibrated IV
     plot_range_pct = st.session_state.get("plot_range_pct", 0.3)
 
