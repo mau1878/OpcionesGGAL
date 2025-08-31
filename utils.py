@@ -404,50 +404,46 @@ def calculate_put_condor(low_opt, mid_low_opt, mid_high_opt, high_opt, num_contr
         "contract_ratios": ratios
     }
     return result if max_profit > 0 else None
+
+
+# REPLACE this function in utils.py
 def calculate_straddle(call_opt, put_opt, num_contracts, commission_rate):
     if call_opt["strike"] != put_opt["strike"]:
         return None
     call_price = get_strategy_price(call_opt, "buy")
     put_price = get_strategy_price(put_opt, "buy")
-    if call_price is None or put_price is None:
+    if any(p is None for p in [call_price, put_price]):
         return None
+
     base_cost = (call_price + put_price) * num_contracts * 100
     commission, market_fees, vat = calculate_fees(base_cost, commission_rate)
     net_cost = base_cost + commission + market_fees + vat
-    max_loss = net_cost
-    strike = call_opt["strike"]
-    net_premium = net_cost / (num_contracts * 100)
-    breakeven_upper = strike + net_premium
-    breakeven_lower = strike - net_premium
+
     return {
-        "max_profit": "Unlimited",
         "net_cost": net_cost,
-        "max_loss": max_loss,
-        "breakeven_upper": breakeven_upper,
-        "breakeven_lower": breakeven_lower,
-        "strikes": [strike]
+        "max_loss": net_cost,
+        "max_profit": float('inf'),  # Added for consistency
+        "strikes": [call_opt["strike"]]
     }
 
-def calculate_strangle(call_opt, put_opt, num_contracts, commission_rate):
-    if call_opt["strike"] <= put_opt["strike"]:
+
+# REPLACE this function in utils.py
+def calculate_strangle(put_opt, call_opt, num_contracts, commission_rate):
+    if put_opt["strike"] >= call_opt["strike"]:
         return None
     call_price = get_strategy_price(call_opt, "buy")
     put_price = get_strategy_price(put_opt, "buy")
-    if call_price is None or put_price is None:
+    if any(p is None for p in [call_price, put_price]):
         return None
+
     base_cost = (call_price + put_price) * num_contracts * 100
     commission, market_fees, vat = calculate_fees(base_cost, commission_rate)
     net_cost = base_cost + commission + market_fees + vat
-    max_loss = net_cost
-    net_premium = net_cost / (num_contracts * 100)
-    breakeven_upper = call_opt["strike"] + net_premium
-    breakeven_lower = put_opt["strike"] - net_premium
+
     return {
-        "max_profit": "Unlimited",
         "net_cost": net_cost,
-        "max_loss": max_loss,
-        "breakeven_upper": breakeven_upper,
-        "breakeven_lower": breakeven_lower,
+        "max_loss": net_cost,
+        "max_profit": float('inf'),  # Added for consistency
         "strikes": [put_opt["strike"], call_opt["strike"]]
     }
 
@@ -515,48 +511,80 @@ def create_complex_strategy_table(options: list, strategy_func, num_contracts: i
                 }
                 data.append(entry)
     return pd.DataFrame(data)
-def create_vol_strategy_table(calls: list, puts: list, strategy_func, num_contracts: int, commission_rate: float):
+
+
+# REPLACE this function in utils.py
+def create_vol_strategy_table(calls: list, puts: list, strategy_func, num_contracts: int,
+                              commission_rate: float) -> pd.DataFrame:
     data = []
-    call_strikes = sorted(set(o["strike"] for o in calls))
-    put_strikes = sorted(set(o["strike"] for o in puts))
-    if strategy_func == calculate_straddle:
-        for strike in call_strikes:
-            if strike in put_strikes:
-                call = next(o for o in calls if o["strike"] == strike)
-                put = next(o for o in puts if o["strike"] == strike)
+
+    if "straddle" in strategy_func.__name__:
+        put_map = {p['strike']: p for p in puts}
+        for call in calls:
+            if call['strike'] in put_map:
+                put = put_map[call['strike']]
                 result = strategy_func(call, put, num_contracts, commission_rate)
                 if result:
-                    ratio = result["net_cost"] / result["max_loss"]
-                    data.append({
-                        "Strikes": f"{strike:.2f} (Call & Put)",
+                    entry = {
+                        "Strikes": f"{call['strike']:.2f}",
                         "Net Cost": result["net_cost"],
-                        "Max Profit": result["max_profit"],
                         "Max Loss": result["max_loss"],
-                        "Breakeven Upper": result["breakeven_upper"],
-                        "Breakeven Lower": result["breakeven_lower"],
-                        "Cost-to-Loss Ratio": ratio,
+                        "Max Profit": "Unlimited",
+                        "Cost-to-Profit Ratio": "N/A",  # Updated
                         "strikes": result["strikes"]
-                    })
-    elif strategy_func == calculate_strangle:
-        for call_strike in call_strikes:
-            for put_strike in put_strikes:
-                if call_strike > put_strike:
-                    call = next(o for o in calls if o["strike"] == call_strike)
-                    put = next(o for o in puts if o["strike"] == put_strike)
-                    result = strategy_func(call, put, num_contracts, commission_rate)
-                    if result:
-                        ratio = result["net_cost"] / result["max_loss"]
-                        data.append({
-                            "Strikes": f"Put {put_strike:.2f} - Call {call_strike:.2f}",
-                            "Net Cost": result["net_cost"],
-                            "Max Profit": result["max_profit"],
-                            "Max Loss": result["max_loss"],
-                            "Breakeven Upper": result["breakeven_upper"],
-                            "Breakeven Lower": result["breakeven_lower"],
-                            "Cost-to-Loss Ratio": ratio,
-                            "strikes": result["strikes"]
-                        })
+                    }
+                    data.append(entry)
+    else:  # Strangle
+        combos = list(product(puts, calls))
+        for put, call in combos:
+            result = strategy_func(put, call, num_contracts, commission_rate)
+            if result:
+                entry = {
+                    "Strikes": f"{put['strike']:.2f} (Put) - {call['strike']:.2f} (Call)",
+                    "Net Cost": result["net_cost"],
+                    "Max Loss": result["max_loss"],
+                    "Max Profit": "Unlimited",
+                    "Cost-to-Profit Ratio": "N/A",  # Updated
+                    "strikes": result["strikes"]
+                }
+                data.append(entry)
+
     return pd.DataFrame(data)
+
+
+# ADD this new function to utils.py
+def create_spread_table(options: list, strategy_func, num_contracts: int, commission_rate: float,
+                        is_debit: bool) -> pd.DataFrame:
+    strikes = sorted(options, key=lambda x: x["strike"])
+    combos = list(combinations(strikes, 2))
+    data = []
+
+    cost_label = "Net Cost" if is_debit else "Net Credit"
+
+    for combo in combos:
+        opt1, opt2 = combo[0], combo[1]
+        result = strategy_func(opt1, opt2, num_contracts, commission_rate)
+
+        if result and result.get("max_profit", 0) > 0:
+            cost_value = result.get("net_cost")
+            if cost_value is None: continue
+
+            ratio = cost_value / result["max_profit"] if result["max_profit"] > 0 else float('inf')
+
+            entry = {
+                "Strikes": f"{opt1['strike']:.2f} - {opt2['strike']:.2f}",
+                cost_label: cost_value,
+                "Max Profit": result["max_profit"],
+                "Max Loss": result["max_loss"],
+                "Cost-to-Profit Ratio": ratio,
+                "strikes": result["strikes"]
+            }
+            data.append(entry)
+
+    df = pd.DataFrame(data)
+    if not df.empty:
+        df = df.sort_values(by="Cost-to-Profit Ratio", ascending=True)
+    return df
 # --- All your calculate_* and create_* functions go here ---
 # (calculate_bull_call_spread, calculate_straddle, create_spread_matrix, etc.)
 # ... (The full code for these functions is omitted for brevity, but you should paste them all here)
