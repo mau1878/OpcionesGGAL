@@ -8,13 +8,9 @@ from math import gcd
 import plotly.graph_objects as go
 import logging
 from scipy.stats import norm
-# ADD the following import to utils.py if not already present
 from scipy.optimize import minimize_scalar
-import requests
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
-import pandas as pd
-from datetime import datetime
 
 # --- CONFIGURATION ---
 logging.basicConfig(level=logging.INFO)
@@ -23,7 +19,6 @@ STOCK_URL = "https://data912.com/live/arg_stocks"
 OPTIONS_URL = "https://data912.com/live/arg_options"
 DEFAULT_IV = 0.30
 MIN_GAP = 0.01
-
 
 # --- DATE & EXPIRATION HELPERS ---
 def get_third_friday(year: int, month: int) -> date:
@@ -34,16 +29,15 @@ def get_third_friday(year: int, month: int) -> date:
     except ValueError:
         return None
 
-
+year = date.today().year
 EXPIRATION_MAP_2025 = {
-    "O": get_third_friday(2025, 10), "OC": get_third_friday(2025, 10),
-    "N": get_third_friday(2025, 11), "NO": get_third_friday(2025, 11),
-    "D": get_third_friday(2025, 12), "DI": get_third_friday(2025, 12)
+    "O": get_third_friday(year, 10), "OC": get_third_friday(year, 10),
+    "N": get_third_friday(year, 11), "NO": get_third_friday(year, 11),
+    "D": get_third_friday(year, 12), "DI": get_third_friday(year, 12)
 }
 
-
 # --- DATA FETCHING & PARSING ---
-def fetch_stock_data(url="https://data912.com/live/arg_stocks"):
+def fetch_data(url: str) -> list:
     session = requests.Session()
     retry_strategy = Retry(
         total=3,
@@ -53,33 +47,45 @@ def fetch_stock_data(url="https://data912.com/live/arg_stocks"):
     adapter = HTTPAdapter(max_retries=retry_strategy)
     session.mount("https://", adapter)
     try:
-        response = session.get(url, timeout=30)  # Increased timeout to 30 seconds
+        response = session.get(url, timeout=30)
         response.raise_for_status()
-        data = response.json()  # Assuming the API returns JSON; adjust if it's CSV or other format
-        if not data:
-            return None
-        # Convert to DataFrame or process as needed
-        df = pd.DataFrame(data)
-        df["timestamp"] = datetime.now()
-        return df
-    except requests.exceptions.RequestException as e:
-        print(f"Error fetching data from {url}: {e}")
-        return None
+        return response.json()  # Adjust to pd.read_csv(io.StringIO(response.text)) if CSV
+    except requests.RequestException as e:
+        st.error(f"Error fetching data from {url}: {e}")
+        return []
     finally:
         session.close()
 
-# Example usage in data loading (adjust based on your code)
-def load_ggal_data():
-    data = fetch_stock_data()
-    if data is not None:
-        st.session_state.ggal_data = data
-        st.success("Datos actualizados.")
-    else:
-        st.warning("No se pudieron cargar los datos de GGAL. Intente actualizar.")
-        if 'ggal_data' in st.session_state and st.session_state.ggal_data is not None:
-            st.info("Usando datos cached anteriores.")
-            return st.session_state.ggal_data
-    return data
+def parse_option_symbol(symbol: str) -> tuple[str | None, float | None, date | None]:
+    option_type = "call" if symbol.startswith("GFGC") else "put" if symbol.startswith("GFGV") else None
+    if not option_type: return None, None, None
+    data_part = symbol[4:]
+    first_letter_index = next((i for i, char in enumerate(data_part) if char.isalpha()), -1)
+    if first_letter_index == -1: return None, None, None
+    numeric_part, suffix = data_part[:first_letter_index], data_part[first_letter_index:]
+    if not numeric_part: return None, None, None
+    try:
+        strike_price = float(numeric_part) / 10.0 if len(numeric_part) >= 5 and not numeric_part.startswith('1') else float(numeric_part)
+    except ValueError:
+        return None, None, None
+    return option_type, strike_price, EXPIRATION_MAP_2025.get(suffix)
+
+def get_ggal_data() -> tuple[dict | None, list]:
+    stock_data = fetch_data(STOCK_URL)
+    options_data = fetch_data(OPTIONS_URL)
+    ggal_stock = next((s for s in stock_data if s["symbol"] == "GGAL"), None)
+    if not ggal_stock: return None, []
+    ggal_options = []
+    for o in options_data:
+        opt_type, strike, exp = parse_option_symbol(o["symbol"])
+        if all([opt_type, strike, exp, o.get("px_ask", 0) > 0, o.get("px_bid", 0) > 0]):
+            ggal_options.append({
+                "symbol": o["symbol"], "type": opt_type, "strike": strike,
+                "expiration": exp, "px_bid": o["px_bid"], "px_ask": o["px_ask"]
+            })
+    return ggal_stock, ggal_options
+
+# ... (rest of utils.py functions remain unchanged, e.g., calculate_fees, black_scholes, etc.)
 
 
 def parse_option_symbol(symbol: str) -> tuple[str | None, float | None, date | None]:
