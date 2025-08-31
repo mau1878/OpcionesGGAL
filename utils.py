@@ -327,15 +327,15 @@ def create_complex_strategy_table(options, strategy_func, num_contracts, commiss
         if result:
             strikes = tuple(result["strikes"])
             data.append({
-                "Strikes": strikes,
                 "net_cost": result["net_cost"],
                 "max_profit": result["max_profit"],
-                "max_loss": result["max_loss"]
+                "max_loss": result["max_loss"],
+                "strikes": strikes
             })
     if not data:
         return pd.DataFrame()
     df = pd.DataFrame(data)
-    df.set_index("Strikes", inplace=True)
+    df.set_index("strikes", inplace=True)
     return df
 
 def create_vol_strategy_table(calls, puts, strategy_func, num_contracts, commission_rate):
@@ -522,22 +522,24 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
 
     iv = max(iv, 1e-9) # Ensure iv is always positive
 
-    # Now compute the grid with calibrated IV
+    # Compute the grid with calibrated IV
     plot_range_pct = st.session_state.get("plot_range_pct", 0.3)
-
     prices = np.linspace(max(0.1, current_price * (1 - plot_range_pct)), current_price * (1 + plot_range_pct), 50)
     times = np.linspace(0, expiration_days, 20)
     X, Y = np.meshgrid(prices, times)
     Z = np.zeros_like(X)
 
-    scale_factor = 1  # Define scale_factor to avoid NameError and division by zero
+    # Dynamic scale factor to emphasize time decay
+    scale_factor = abs(net_entry) if abs(net_entry) > 0 else 1
+    if "straddle" in strategy_key or "strangle" in strategy_key:
+        scale_factor *= 1.5  # Amplify for high-theta strategies
 
     for i in range(len(times)):
         for j in range(len(prices)):
             price = X[i, j]
             T = (expiration_days - Y[i, j]) / 365.0
-            T = max(T, 1e-9)  # Ensure T is always positive to avoid division by zero
-            Z[i, j] = (strategy_value(price, T, iv) - net_entry) / scale_factor  # Scale values
+            T = max(T, 1e-9)  # Ensure T is always positive
+            Z[i, j] = (strategy_value(price, T, iv) - net_entry) / scale_factor
 
     # Plotting with plotly
     import plotly.graph_objects as go
@@ -548,7 +550,7 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
         scene=dict(
             xaxis_title="Underlying Price",
             yaxis_title="Days from Now",
-            zaxis_title="Profit / Loss",
+            zaxis_title="Profit / Loss (Scaled)",
         ),
         autosize=True,
         margin=dict(l=65, r=50, b=65, t=90),

@@ -17,7 +17,7 @@ with tab1:
     st.subheader("Long Straddle")
     df = utils.create_vol_strategy_table(calls, puts, utils.calculate_straddle, st.session_state.num_contracts, st.session_state.commission_rate)
     if not df.empty:
-        styled_df = df.style.format("{:.2f}", subset=['Net Cost', 'Max Loss', 'Lower Breakeven', 'Upper Breakeven'])
+        styled_df = df.style.format({"net_cost": "{:.2f}", "max_loss": "{:.2f}", "lower_breakeven": "{:.2f}", "upper_breakeven": "{:.2f}"})
         st.dataframe(styled_df)
     else:
         st.dataframe(df)
@@ -25,13 +25,15 @@ with tab1:
     if not df.empty:
         selected = st.selectbox("Selecciona una combinación para visualizar", df.index, key="straddle_select")
         result = df.loc[selected].to_dict()
+        result["strikes"] = [selected] if isinstance(selected, (int, float)) else list(selected)
+        result["num_contracts"] = st.session_state.num_contracts
         utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Straddle")
 
 with tab2:
     st.subheader("Long Strangle")
     df = utils.create_vol_strategy_table(calls, puts, utils.calculate_strangle, st.session_state.num_contracts, st.session_state.commission_rate)
     if not df.empty:
-        styled_df = df.style.format("{:.2f}", subset=['Net Cost', 'Max Loss', 'Lower Breakeven', 'Upper Breakeven'])
+        styled_df = df.style.format({"net_cost": "{:.2f}", "max_loss": "{:.2f}", "lower_breakeven": "{:.2f}", "upper_breakeven": "{:.2f}"})
         st.dataframe(styled_df)
     else:
         st.dataframe(df)
@@ -39,4 +41,6 @@ with tab2:
     if not df.empty:
         selected = st.selectbox("Selecciona una combinación para visualizar", df.index, key="strangle_select")
         result = df.loc[selected].to_dict()
+        result["strikes"] = list(selected)
+        result["num_contracts"] = st.session_state.num_contracts
         utils.visualize_3d_payoff(result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv, key="Strangle")
