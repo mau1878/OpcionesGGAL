@@ -464,16 +464,29 @@ def _create_3d_figure(X, Y, Z, title, current_price):
         name="Zero Profit/Loss"
     )
     
-    # Red plane at x=current_price
-    z_current = np.linspace(z_min, z_max, len(Y[:, 0]))
-    y_current = Y[:, 0]
-    x_current = np.full_like(z_current, current_price)
-    X_current, Z_current = np.meshgrid([current_price, current_price], z_current)
-    Y_current = np.tile(y_current[:, np.newaxis], (1, 2))
-    red_plane = go.Surface(
-        x=X_current, y=Y_current, z=Z_current,
-        colorscale=[[0, 'rgba(255, 0, 0, 0.2)'], [1, 'rgba(255, 0, 0, 0.2)']],
-        showscale=False,
+    # Red plane at x=current_price using Mesh3d
+    y_min, y_max = np.min(Y), np.max(Y)
+    # Define vertices for the rectangle plane
+    vertices = [
+        [current_price, y_min, z_min],
+        [current_price, y_max, z_min],
+        [current_price, y_min, z_max],
+        [current_price, y_max, z_max]
+    ]
+    # Define triangles for the plane
+    i = [0, 0]
+    j = [1, 2]
+    k = [2, 3]
+    red_plane = go.Mesh3d(
+        x=[v[0] for v in vertices],
+        y=[v[1] for v in vertices],
+        z=[v[2] for v in vertices],
+        i=i,
+        j=j,
+        k=k,
+        opacity=0.2,
+        color='red',
+        flatshading=True,
         name="Current GGAL Price"
     )
     
