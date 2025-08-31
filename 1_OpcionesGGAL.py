@@ -25,6 +25,10 @@ if not ggal_stock or not ggal_options:
     st.stop()
 
 st.session_state.current_price = float(ggal_stock["c"])
+if not st.session_state.current_price or st.session_state.current_price <= 0:
+    st.error("El precio actual de GGAL es inválido o no está disponible. Intente actualizar los datos.")
+    st.stop()
+
 st.metric(label="Precio Actual de GGAL (ARS)", value=f"{st.session_state.current_price:.2f}")
 st.caption(f"Última actualización: {st.session_state.last_updated}")
 
@@ -43,14 +47,20 @@ st.session_state.selected_exp = st.sidebar.selectbox(
     format_func=lambda x: x.strftime("%Y-%m-%d")
 )
 
-
 st.session_state.num_contracts = st.sidebar.number_input("Número de contratos", min_value=1, value=1, step=1)
 st.session_state.commission_rate = st.sidebar.number_input("Comisión (%)", min_value=0.0, value=0.5, step=0.1) / 100
 st.sidebar.caption("Las tarifas son estimaciones; las reales pueden variar.")
-st.session_state.iv = st.sidebar.number_input("Volatilidad Implícita (%)", min_value=0.0, value=utils.DEFAULT_IV * 100, step=1.0) / 100
+# Set default IV directly (no user input)
+st.session_state.iv = utils.DEFAULT_IV  # 0.30
 strike_percentage = st.sidebar.slider("Rango de Strikes (% del precio actual)", 0.0, 100.0, 20.0) / 100
-st.session_state.plot_range_pct = st.sidebar.slider("Rango de Precios en Gráficos 3D (% del precio actual)", 10.0, 200.0, 30.0) / 100
-st.session_state.risk_free_rate = st.sidebar.number_input("Tasa Libre de Riesgo (%)", min_value=0.0, value=10.0, step=1.0) / 100  # Reduced to 10% default
+st.session_state.plot_range_pct = st.sidebar.slider("Rango de Precios en Gráficos 3D (% del precio actual)", 10.0, 200.0, 50.0) / 100
+st.session_state.risk_free_rate = st.sidebar.number_input("Tasa Libre de Riesgo (%)", min_value=0.0, value=10.0, step=1.0) / 100
+
+# Debug plot range
+st.session_state.debug_plot_range = {
+    "min_price": st.session_state.current_price * (1 - st.session_state.plot_range_pct),
+    "max_price": st.session_state.current_price * (1 + st.session_state.plot_range_pct)
+}
 
 min_strike = st.session_state.current_price * (1 - strike_percentage)
 max_strike = st.session_state.current_price * (1 + strike_percentage)
@@ -60,10 +70,22 @@ st.session_state.filtered_puts = [o for o in ggal_options if o["type"] == "put" 
 st.session_state.expiration_days = max(1, (st.session_state.selected_exp - date.today()).days)
 
 if not st.session_state.filtered_calls and not st.session_state.filtered_puts:
-    st.warning("No hay opciones disponibles en el rango de strikes seleccionado para esta fecha de vencimiento.")
+    st.warning(
+        f"No hay opciones disponibles para la fecha de vencimiento {st.session_state.selected_exp.strftime('%Y-%m-%d')} "
+        f"en el rango de strikes [{min_strike:.2f}, {max_strike:.2f}]. "
+        "Ajuste el rango de strikes o seleccione otra fecha."
+    )
 elif not st.session_state.filtered_calls:
-    st.warning("No hay calls disponibles en el rango de strikes seleccionado para esta fecha de vencimiento.")
+    st.warning(
+        f"No hay calls disponibles en el rango de strikes [{min_strike:.2f}, {max_strike:.2f}] "
+        f"para la fecha de vencimiento {st.session_state.selected_exp.strftime('%Y-%m-%d')}. "
+        "Ajuste el rango de strikes."
+    )
 elif not st.session_state.filtered_puts:
-    st.warning("No hay puts disponibles en el rango de strikes seleccionado para esta fecha de vencimiento.")
+    st.warning(
+        f"No hay puts disponibles en el rango de strikes [{min_strike:.2f}, {max_strike:.2f}] "
+        f"para la fecha de vencimiento {st.session_state.selected_exp.strftime('%Y-%m-%d')}. "
+        "Ajuste el rango de strikes."
+    )
 
 st.info("La configuración ha sido guardada. Por favor, seleccione una página de estrategia en la barra lateral.")
