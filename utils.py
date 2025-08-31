@@ -563,8 +563,6 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
     net_entry = strategy_result.get("net_cost", 0)
     strikes = strategy_result.get("strikes", [])
     num_contracts = strategy_result.get("num_contracts", 1)
-    max_profit = strategy_result.get("max_profit", 0)
-    max_loss = strategy_result.get("max_loss", 0)
 
     # Determine option type and fetch corresponding options
     options = st.session_state.get("filtered_calls", []) if "call" in key.lower() else st.session_state.get("filtered_puts", [])
@@ -683,15 +681,13 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
     X, Y = np.meshgrid(prices, times)
     Z = np.zeros_like(X)
 
-    # Improved scaling factor: use the maximum of absolute values to reflect full range
-    scale_factor = max(abs(max_profit), abs(max_loss), abs(net_entry)) if max(abs(max_profit), abs(max_loss), abs(net_entry)) > 0 else 1.0
-
+    # Skip scaling, use raw values
     for i in range(len(times)):
         for j in range(len(prices)):
             price = X[i, j]
             T = (expiration_days - Y[i, j]) / 365.0
             T = max(T, 1e-9)
-            Z[i, j] = (strategy_value(price, T, iv) - net_entry) / scale_factor
+            Z[i, j] = strategy_value(price, T, iv) - net_entry
 
     fig = go.Figure(data=[go.Surface(z=Z, x=X, y=Y)])
     fig.update_layout(
@@ -699,7 +695,7 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
         scene=dict(
             xaxis_title="Underlying Price",
             yaxis_title="Days from Now",
-            zaxis_title="Profit / Loss (Scaled)",
+            zaxis_title="Profit / Loss (Raw)",
         ),
         autosize=True,
         margin=dict(l=65, r=50, b=65, t=90),
