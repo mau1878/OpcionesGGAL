@@ -112,7 +112,7 @@ def calculate_fees(base_cost: float, commission_rate: float) -> float:
     vat = (commission + market_fees) * 0.21
     return commission + market_fees + vat
 
-# --- Strategy Calculation Functions (Unchanged) ---
+# --- Strategy Calculation Functions ---
 
 def calculate_bull_call_spread(long_opt, short_opt, num_contracts, commission_rate):
     if long_opt["strike"] >= short_opt["strike"]: return None
@@ -194,10 +194,7 @@ def calculate_bear_call_spread(short_opt, long_opt, num_contracts, commission_ra
         "breakeven": breakeven
     }
 
-# Assuming the truncated part includes calculate_bear_put_spread, calculate_call_butterfly, etc. I'll stub them based on context.
-
 def calculate_bear_put_spread(long_opt, short_opt, num_contracts, commission_rate):
-    # Similar to bull call but for puts, buy higher, sell lower
     if long_opt["strike"] <= short_opt["strike"]: return None
     long_price = get_strategy_price(long_opt, "buy")
     short_price = get_strategy_price(short_opt, "sell")
@@ -224,7 +221,6 @@ def calculate_bear_put_spread(long_opt, short_opt, num_contracts, commission_rat
     }
 
 def calculate_call_butterfly(long_low, short_mid, long_high, num_contracts, commission_rate):
-    # Buy low, sell 2 mid, buy high
     if not (long_low["strike"] < short_mid["strike"] < long_high["strike"]): return None
     long_low_price = get_strategy_price(long_low, "buy")
     short_mid_price = get_strategy_price(short_mid, "sell")
@@ -255,12 +251,7 @@ def calculate_call_butterfly(long_low, short_mid, long_high, num_contracts, comm
         "num_contracts": num_contracts
     }
 
-# Add stubs for other calcs like calculate_put_butterfly, calculate_call_condor, calculate_put_condor, calculate_straddle, calculate_strangle based on original.
-
-# Insert these functions into utils.py, replacing the stubbed placeholders for calculate_put_butterfly, calculate_call_condor, calculate_put_condor
-
 def calculate_put_butterfly(long_high, short_mid, long_low, num_contracts, commission_rate):
-    # Buy high strike put, sell two middle strike puts, buy low strike put
     if not (long_low["strike"] < short_mid["strike"] < long_high["strike"]):
         return None
     long_high_price = get_strategy_price(long_high, "buy")
@@ -269,14 +260,12 @@ def calculate_put_butterfly(long_high, short_mid, long_low, num_contracts, commi
     if any(p is None for p in [long_high_price, short_mid_price, long_low_price]):
         return None
 
-    # Calculate base cost: buy 1 high + buy 1 low - sell 2 mid
     base_cost = (long_high_price + long_low_price - 2 * short_mid_price) * 100 * num_contracts
     total_fees = (calculate_fees(long_high_price * 100 * num_contracts, commission_rate) +
                   calculate_fees(short_mid_price * 100 * num_contracts * 2, commission_rate) +
                   calculate_fees(long_low_price * 100 * num_contracts, commission_rate))
     net_cost = base_cost + total_fees
 
-    # Calculate max profit/loss and breakevens
     width_lower = short_mid["strike"] - long_low["strike"]
     width_upper = long_high["strike"] - short_mid["strike"]
     max_profit = min(width_lower, width_upper) * 100 * num_contracts - net_cost
@@ -296,7 +285,6 @@ def calculate_put_butterfly(long_high, short_mid, long_low, num_contracts, commi
     }
 
 def calculate_call_condor(long_low, short_mid_low, short_mid_high, long_high, num_contracts, commission_rate):
-    # Buy low strike call, sell middle-low strike call, sell middle-high strike call, buy high strike call
     if not (long_low["strike"] < short_mid_low["strike"] < short_mid_high["strike"] < long_high["strike"]):
         return None
     long_low_price = get_strategy_price(long_low, "buy")
@@ -306,7 +294,6 @@ def calculate_call_condor(long_low, short_mid_low, short_mid_high, long_high, nu
     if any(p is None for p in [long_low_price, short_mid_low_price, short_mid_high_price, long_high_price]):
         return None
 
-    # Calculate base cost: buy 1 low + buy 1 high - sell 1 mid_low - sell 1 mid_high
     base_cost = (long_low_price + long_high_price - short_mid_low_price - short_mid_high_price) * 100 * num_contracts
     total_fees = (calculate_fees(long_low_price * 100 * num_contracts, commission_rate) +
                   calculate_fees(short_mid_low_price * 100 * num_contracts, commission_rate) +
@@ -314,7 +301,6 @@ def calculate_call_condor(long_low, short_mid_low, short_mid_high, long_high, nu
                   calculate_fees(long_high_price * 100 * num_contracts, commission_rate))
     net_cost = base_cost + total_fees
 
-    # Calculate max profit/loss and breakevens
     width_lower = short_mid_low["strike"] - long_low["strike"]
     width_upper = long_high["strike"] - short_mid_high["strike"]
     max_profit = min(width_lower, width_upper) * 100 * num_contracts - net_cost
@@ -334,7 +320,6 @@ def calculate_call_condor(long_low, short_mid_low, short_mid_high, long_high, nu
     }
 
 def calculate_put_condor(long_high, short_mid_high, short_mid_low, long_low, num_contracts, commission_rate):
-    # Buy high strike put, sell middle-high strike put, sell middle-low strike put, buy low strike put
     if not (long_low["strike"] < short_mid_low["strike"] < short_mid_high["strike"] < long_high["strike"]):
         return None
     long_high_price = get_strategy_price(long_high, "buy")
@@ -344,7 +329,6 @@ def calculate_put_condor(long_high, short_mid_high, short_mid_low, long_low, num
     if any(p is None for p in [long_high_price, short_mid_high_price, short_mid_low_price, long_low_price]):
         return None
 
-    # Calculate base cost: buy 1 high + buy 1 low - sell 1 mid_high - sell 1 mid_low
     base_cost = (long_high_price + long_low_price - short_mid_high_price - short_mid_low_price) * 100 * num_contracts
     total_fees = (calculate_fees(long_high_price * 100 * num_contracts, commission_rate) +
                   calculate_fees(short_mid_high_price * 100 * num_contracts, commission_rate) +
@@ -352,7 +336,6 @@ def calculate_put_condor(long_high, short_mid_high, short_mid_low, long_low, num
                   calculate_fees(long_low_price * 100 * num_contracts, commission_rate))
     net_cost = base_cost + total_fees
 
-    # Calculate max profit/loss and breakevens
     width_lower = short_mid_low["strike"] - long_low["strike"]
     width_upper = long_high["strike"] - short_mid_high["strike"]
     max_profit = min(width_lower, width_upper) * 100 * num_contracts - net_cost
@@ -465,14 +448,43 @@ def _compute_payoff_grid(strategy_value_func, current_price, expiration_days, iv
             except Exception as e:
                 logger.warning(f"Error computing payoff at price={price}, T={T}: {e}")
                 Z[i, j] = 0
-    return X, Y, Z
+    return X, Y, Z, min_price, max_price, times
 
-def _create_3d_figure(X, Y, Z, title):
-    fig = go.Figure(data=[go.Surface(
-        z=Z, x=X, y=Y,
+def _create_3d_figure(X, Y, Z, title, current_price):
+    # Estimate z-axis range for the zero-profit plane and current price plane
+    z_min = np.min(Z) * 1.1 if np.min(Z) < 0 else -np.max(Z) * 0.1
+    z_max = np.max(Z) * 1.1 if np.max(Z) > 0 else -np.min(Z) * 0.1
+    
+    # Blue plane at z=0 (profit/loss = 0)
+    z_zero = np.zeros_like(X)
+    blue_plane = go.Surface(
+        x=X, y=Y, z=z_zero,
+        colorscale=[[0, 'rgba(0, 0, 255, 0.2)'], [1, 'rgba(0, 0, 255, 0.2)']],
+        showscale=False,
+        name="Zero Profit/Loss"
+    )
+    
+    # Red plane at x=current_price
+    x_current = np.full_like(X, current_price)
+    z_current = np.linspace(z_min, z_max, X.shape[0])
+    x_current, y_current = np.meshgrid(np.array([current_price]), Y[0])
+    z_current = np.tile(z_current[:, np.newaxis], (1, X.shape[1]))
+    red_plane = go.Surface(
+        x=x_current, y=Y, z=z_current,
+        colorscale=[[0, 'rgba(255, 0, 0, 0.2)'], [1, 'rgba(255, 0, 0, 0.2)']],
+        showscale=False,
+        name="Current GGAL Price"
+    )
+    
+    # Main payoff surface
+    payoff_surface = go.Surface(
+        x=X, y=Y, z=Z,
         colorscale='RdYlGn',
-        showscale=True
-    )])
+        showscale=True,
+        name="Payoff Surface"
+    )
+    
+    fig = go.Figure(data=[payoff_surface, blue_plane, red_plane])
     
     fig.update_layout(
         title=title,
@@ -488,7 +500,6 @@ def _create_3d_figure(X, Y, Z, title):
     return fig
 
 def black_scholes(S, K, T, r, sigma, option_type="call"):
-    # Full implementation from truncated part
     if S <= 0:
         return 0 if option_type == "call" else max(K - S, 0)
     if K <= 0:
@@ -520,7 +531,6 @@ def intrinsic_value(S, K, option_type="call"):
 # --- Split Table Creation Functions ---
 
 def create_bullish_spread_table(options, calc_func, num_contracts, commission_rate, is_debit=True):
-    # Adapted from original create_spread_table for bullish (bull call debit, bull put credit)
     data = []
     options_sorted = sorted(options, key=lambda o: o["strike"])
     for long_opt, short_opt in combinations(options_sorted, 2):
@@ -538,10 +548,9 @@ def create_bullish_spread_table(options, calc_func, num_contracts, commission_ra
     return df
 
 def create_bearish_spread_table(options, calc_func, num_contracts, commission_rate, is_debit=True):
-    # Similar to bullish but tailored for bear (bear call credit, bear put debit)
     data = []
     options_sorted = sorted(options, key=lambda o: o["strike"])
-    for short_opt, long_opt in combinations(options_sorted, 2):  # Note: order might differ for bear
+    for short_opt, long_opt in combinations(options_sorted, 2):
         result = calc_func(short_opt, long_opt, num_contracts, commission_rate) if not is_debit else calc_func(long_opt, short_opt, num_contracts, commission_rate)
         if result:
             row = {
@@ -556,7 +565,6 @@ def create_bearish_spread_table(options, calc_func, num_contracts, commission_ra
     return df
 
 def create_neutral_table(options, calc_func, num_contracts, commission_rate, num_legs):
-    # Adapted for neutral (butterfly 3 legs, condor 4 legs)
     data = []
     options_sorted = sorted(options, key=lambda o: o["strike"])
     for combo in combinations(options_sorted, num_legs):
@@ -578,7 +586,6 @@ def create_neutral_table(options, calc_func, num_contracts, commission_rate, num
     return df
 
 def create_volatility_table(leg1_options, leg2_options, calc_func, num_contracts, commission_rate):
-    # Adapted for volatility (straddle same strike, strangle different)
     data = []
     for opt1, opt2 in product(leg1_options, leg2_options):
         result = calc_func(opt1, opt2, num_contracts, commission_rate)
@@ -594,55 +601,15 @@ def create_volatility_table(leg1_options, leg2_options, calc_func, num_contracts
     df = pd.DataFrame.from_dict(dict(data), orient='index') if data else pd.DataFrame()
     return df
 
-# Note: The original create_spread_matrix is not split since it's used for matrices; if needed, split similarly.
-
 def create_spread_matrix(options, calc_func, num_contracts, commission_rate, is_debit=True):
-    # Unchanged from original; used for matrices in spreads
     options_sorted = sorted(options, key=lambda o: o["strike"])
     strikes = [o["strike"] for o in options_sorted]
     profit_df = pd.DataFrame(index=strikes, columns=strikes)
-    # ... (implement matrix logic as in original, truncated)
-    return profit_df, ..., ..., ...  # Placeholder for full impl
+    return profit_df, None, None, None  # Placeholder for full impl
 
 # --- Split 3D Visualization Functions ---
 
 def visualize_bullish_3d(result, current_price, expiration_days, iv, key):
-    # Specific for bullish spreads
-    raw_net = result["raw_net"]
-    net_entry = result["net_cost"]  # Debit positive, credit negative
-    num_contracts = result["num_contracts"]
-    r = st.session_state.get("risk_free_rate", 0.50)
-    
-    def strategy_value(price, T, sigma):
-        strikes = result["strikes"]
-        k1, k2 = min(strikes), max(strikes)  # k1 lower, k2 higher
-        use_intrinsic = T <= 1e-6
-        
-        if "call" in key.lower():  # Bull call: buy k1, sell k2
-            if use_intrinsic:
-                return (intrinsic_value(price, k1, "call") - intrinsic_value(price, k2, "call"))
-            else:
-                return (black_scholes(price, k1, T, r, sigma, "call") - 
-                        black_scholes(price, k2, T, r, sigma, "call"))
-        elif "put" in key.lower():  # Bull put: sell k2, buy k1 (credit)
-            if use_intrinsic:
-                return (-intrinsic_value(price, k2, "put") + intrinsic_value(price, k1, "put"))
-            else:
-                return (-black_scholes(price, k2, T, r, sigma, "put") + 
-                        black_scholes(price, k1, T, r, sigma, "put"))
-        return 0.0
-    
-    iv = _calibrate_iv(raw_net, current_price, expiration_days, strategy_value)
-    iv = max(iv, 1e-9)
-    
-    X, Y, Z = _compute_payoff_grid(lambda p, t, s: strategy_value(p, t, s) * 100 * num_contracts, 
-                                   current_price, expiration_days, iv, net_entry)
-    
-    fig = _create_3d_figure(X, Y, Z, f"3D Payoff for {key} (IV: {iv:.1%})")
-    st.plotly_chart(fig, use_container_width=True, key=key)
-
-def visualize_bearish_3d(result, current_price, expiration_days, iv, key):
-    # Specific for bearish spreads
     raw_net = result["raw_net"]
     net_entry = result["net_cost"]
     num_contracts = result["num_contracts"]
@@ -653,13 +620,49 @@ def visualize_bearish_3d(result, current_price, expiration_days, iv, key):
         k1, k2 = min(strikes), max(strikes)
         use_intrinsic = T <= 1e-6
         
-        if "call" in key.lower():  # Bear call: sell k1, buy k2 (credit)
+        if "call" in key.lower():
+            if use_intrinsic:
+                return (intrinsic_value(price, k1, "call") - intrinsic_value(price, k2, "call"))
+            else:
+                return (black_scholes(price, k1, T, r, sigma, "call") - 
+                        black_scholes(price, k2, T, r, sigma, "call"))
+        elif "put" in key.lower():
+            if use_intrinsic:
+                return (-intrinsic_value(price, k2, "put") + intrinsic_value(price, k1, "put"))
+            else:
+                return (-black_scholes(price, k2, T, r, sigma, "put") + 
+                        black_scholes(price, k1, T, r, sigma, "put"))
+        return 0.0
+    
+    iv = _calibrate_iv(raw_net, current_price, expiration_days, strategy_value)
+    iv = max(iv, 1e-9)
+    
+    X, Y, Z, min_price, max_price, times = _compute_payoff_grid(
+        lambda p, t, s: strategy_value(p, t, s) * 100 * num_contracts, 
+        current_price, expiration_days, iv, net_entry
+    )
+    
+    fig = _create_3d_figure(X, Y, Z, f"3D Payoff for {key} (IV: {iv:.1%})", current_price)
+    st.plotly_chart(fig, use_container_width=True, key=key)
+
+def visualize_bearish_3d(result, current_price, expiration_days, iv, key):
+    raw_net = result["raw_net"]
+    net_entry = result["net_cost"]
+    num_contracts = result["num_contracts"]
+    r = st.session_state.get("risk_free_rate", 0.50)
+    
+    def strategy_value(price, T, sigma):
+        strikes = result["strikes"]
+        k1, k2 = min(strikes), max(strikes)
+        use_intrinsic = T <= 1e-6
+        
+        if "call" in key.lower():
             if use_intrinsic:
                 return (-intrinsic_value(price, k1, "call") + intrinsic_value(price, k2, "call"))
             else:
                 return (-black_scholes(price, k1, T, r, sigma, "call") + 
                         black_scholes(price, k2, T, r, sigma, "call"))
-        elif "put" in key.lower():  # Bear put: buy k2, sell k1 (debit)
+        elif "put" in key.lower():
             if use_intrinsic:
                 return (intrinsic_value(price, k2, "put") - intrinsic_value(price, k1, "put"))
             else:
@@ -670,14 +673,15 @@ def visualize_bearish_3d(result, current_price, expiration_days, iv, key):
     iv = _calibrate_iv(raw_net, current_price, expiration_days, strategy_value)
     iv = max(iv, 1e-9)
     
-    X, Y, Z = _compute_payoff_grid(lambda p, t, s: strategy_value(p, t, s) * 100 * num_contracts, 
-                                   current_price, expiration_days, iv, net_entry)
+    X, Y, Z, min_price, max_price, times = _compute_payoff_grid(
+        lambda p, t, s: strategy_value(p, t, s) * 100 * num_contracts, 
+        current_price, expiration_days, iv, net_entry
+    )
     
-    fig = _create_3d_figure(X, Y, Z, f"3D Payoff for {key} (IV: {iv:.1%})")
+    fig = _create_3d_figure(X, Y, Z, f"3D Payoff for {key} (IV: {iv:.1%})", current_price)
     st.plotly_chart(fig, use_container_width=True, key=key)
 
 def visualize_neutral_3d(result, current_price, expiration_days, iv, key):
-    # Specific for neutral (butterfly, condor)
     raw_net = result["raw_net"]
     net_entry = result["net_cost"]
     num_contracts = result["num_contracts"]
@@ -697,13 +701,14 @@ def visualize_neutral_3d(result, current_price, expiration_days, iv, key):
     iv = _calibrate_iv(raw_net, current_price, expiration_days, strategy_value)
     iv = max(iv, 1e-9)
     
-    X, Y, Z = _compute_payoff_grid(strategy_value, current_price, expiration_days, iv, net_entry)
+    X, Y, Z, min_price, max_price, times = _compute_payoff_grid(
+        strategy_value, current_price, expiration_days, iv, net_entry
+    )
     
-    fig = _create_3d_figure(X, Y, Z, f"3D Payoff for {key} (IV: {iv:.1%})")
+    fig = _create_3d_figure(X, Y, Z, f"3D Payoff for {key} (IV: {iv:.1%})", current_price)
     st.plotly_chart(fig, use_container_width=True, key=key)
 
 def visualize_volatility_3d(result, current_price, expiration_days, iv, key):
-    # Specific for volatility (straddle, strangle)
     raw_net = result["raw_net"]
     net_entry = result["net_cost"]
     num_contracts = result["num_contracts"]
@@ -712,7 +717,7 @@ def visualize_volatility_3d(result, current_price, expiration_days, iv, key):
     
     def strategy_value(price, T, sigma):
         use_intrinsic = T <= 1e-6
-        if len(strikes) == 1:  # Straddle
+        if len(strikes) == 1:
             k = strikes[0]
             if use_intrinsic:
                 call_val = intrinsic_value(price, k, "call")
@@ -721,7 +726,7 @@ def visualize_volatility_3d(result, current_price, expiration_days, iv, key):
                 call_val = black_scholes(price, k, T, r, sigma, "call")
                 put_val = black_scholes(price, k, T, r, sigma, "put")
             return (call_val + put_val) * 100 * num_contracts
-        else:  # Strangle
+        else:
             put_k, call_k = min(strikes), max(strikes)
             if use_intrinsic:
                 call_val = intrinsic_value(price, call_k, "call")
@@ -735,7 +740,9 @@ def visualize_volatility_3d(result, current_price, expiration_days, iv, key):
     iv = _calibrate_iv(raw_net, current_price, expiration_days, strategy_value)
     iv = max(iv, 1e-9)
     
-    X, Y, Z = _compute_payoff_grid(strategy_value, current_price, expiration_days, iv, net_entry)
+    X, Y, Z, min_price, max_price, times = _compute_payoff_grid(
+        strategy_value, current_price, expiration_days, iv, net_entry
+    )
     
-    fig = _create_3d_figure(X, Y, Z, f"3D Payoff for {key} (IV: {iv:.1%})")
+    fig = _create_3d_figure(X, Y, Z, f"3D Payoff for {key} (IV: {iv:.1%})", current_price)
     st.plotly_chart(fig, use_container_width=True, key=key)
