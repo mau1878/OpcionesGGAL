@@ -202,14 +202,12 @@ def calculate_call_butterfly(low_opt, mid_opt, high_opt, num_contracts, commissi
     net_cost = sum(p * r for p, r in zip(prices, ratios)) * 100 + calculate_fees(base_cost, commission_rate)
 
     max_profit = (mid_opt["strike"] - low_opt["strike"]) * abs(ratios[0]) * 100 - net_cost
-    return {"max_profit": max_profit, "net_cost": net_cost, "max_loss": net_cost,
-            "contracts": f"{ratios[0]} : {ratios[1]} : {ratios[2]}",
-            "strikes": [low_opt["strike"], mid_opt["strike"], high_opt["strike"]], "contract_ratios": ratios,"num_contracts": num_contracts}
+    return {"net_cost": net_cost, "max_profit": max_profit, "max_loss": max_loss, "strikes": strikes, "contract_ratios": [1, -2, 1], "num_contracts": num_contracts}
 
 
 def calculate_put_butterfly(low_opt, mid_opt, high_opt, num_contracts, commission_rate):
     # This function is identical to the call version, just with puts.
-    return calculate_call_butterfly(low_opt, mid_opt, high_opt, num_contracts, commission_rate)
+    return {"net_cost": net_cost, "max_profit": max_profit, "max_loss": max_loss, "strikes": strikes, "contract_ratios": [1, -2, 1], "num_contracts": num_contracts}
 
 
 def calculate_call_condor(k1_opt, k2_opt, k3_opt, k4_opt, num_contracts, commission_rate):
@@ -231,15 +229,12 @@ def calculate_call_condor(k1_opt, k2_opt, k3_opt, k4_opt, num_contracts, commiss
     net_cost = sum(p * r for p, r in zip(prices, ratios)) * 100 + calculate_fees(base_cost, commission_rate)
 
     max_profit = (k2_opt["strike"] - k1_opt["strike"]) * abs(ratios[0]) * 100 - net_cost
-    return {"max_profit": max_profit, "net_cost": net_cost, "max_loss": net_cost,
-            "contracts": f"{ratios[0]} : {ratios[1]} : {ratios[2]} : {ratios[3]}",
-            "strikes": [k1_opt["strike"], k2_opt["strike"], k3_opt["strike"], k4_opt["strike"]],
-            "contract_ratios": ratios,"num_contracts": num_contracts}
+    return {"net_cost": net_cost, "max_profit": max_profit, "max_loss": max_loss, "strikes": strikes, "contract_ratios": [1, -1, -1, 1], "num_contracts": num_contracts}
 
 
 def calculate_put_condor(k1_opt, k2_opt, k3_opt, k4_opt, num_contracts, commission_rate):
     # This function is identical to the call version, just with puts.
-    return calculate_call_condor(k1_opt, k2_opt, k3_opt, k4_opt, num_contracts, commission_rate)
+    return {"net_cost": net_cost, "max_profit": max_profit, "max_loss": max_loss, "strikes": strikes, "contract_ratios": [1, -1, -1, 1], "num_contracts": num_contracts}
 
 
 def calculate_straddle(call_opt, put_opt, num_contracts, commission_rate):
@@ -266,39 +261,41 @@ def calculate_strangle(put_opt, call_opt, num_contracts, commission_rate):
 # --- TABLE CREATION ---
 def create_spread_table(options, strategy_func, num_contracts, commission_rate, is_debit):
     data = []
-    for long_opt, short_opt in combinations(options, 2):
-        if strategy_func.__name__ == "calculate_bull_call_spread" and long_opt["strike"] >= short_opt["strike"]:
-            continue
-        if strategy_func.__name__ == "calculate_bull_put_spread" and long_opt["strike"] >= short_opt["strike"]:
-            continue
-        if strategy_func.__name__ == "calculate_bear_call_spread" and long_opt["strike"] <= short_opt["strike"]:
-            continue
-        if strategy_func.__name__ == "calculate_bear_put_spread" and long_opt["strike"] <= short_opt["strike"]:
-            continue
-        
-        # Determine which option is long and which is short based on strategy
-        if strategy_func.__name__ in ["calculate_bull_call_spread", "calculate_bear_put_spread"]:
-            result = strategy_func(long_opt=long_opt, short_opt=short_opt, num_contracts=num_contracts, commission_rate=commission_rate)
-        elif strategy_func.__name__ in ["calculate_bull_put_spread", "calculate_bear_call_spread"]:
-            result = strategy_func(short_opt=long_opt, long_opt=short_opt, num_contracts=num_contracts, commission_rate=commission_rate)
-        
+    func_name = strategy_func.__name__
+    for opt1, opt2 in combinations(options, 2):
+        if opt1["strike"] > opt2["strike"]:
+            opt1, opt2 = opt2, opt1  # Ensure opt1 < opt2
+        if func_name == "calculate_bull_call_spread":
+            result = strategy_func(long_opt=opt1, short_opt=opt2, num_contracts=num_contracts, commission_rate=commission_rate)
+            long_strike = opt1["strike"]
+            short_strike = opt2["strike"]
+        elif func_name == "calculate_bear_call_spread":
+            result = strategy_func(short_opt=opt1, long_opt=opt2, num_contracts=num_contracts, commission_rate=commission_rate)
+            long_strike = opt2["strike"]
+            short_strike = opt1["strike"]
+        elif func_name == "calculate_bull_put_spread":
+            result = strategy_func(short_opt=opt2, long_opt=opt1, num_contracts=num_contracts, commission_rate=commission_rate)
+            long_strike = opt1["strike"]
+            short_strike = opt2["strike"]
+        elif func_name == "calculate_bear_put_spread":
+            result = strategy_func(long_opt=opt2, short_opt=opt1, num_contracts=num_contracts, commission_rate=commission_rate)
+            long_strike = opt2["strike"]
+            short_strike = opt1["strike"]
         if result and "net_cost" in result and result["net_cost"] is not None:
             cost = result["net_cost"]
             max_profit = result["max_profit"]
             max_loss = result["max_loss"]
             cost_to_profit = abs(cost / max_profit) if max_profit != 0 else float('inf')
             data.append({
-                "Long Strike": long_opt["strike"],
-                "Short Strike": short_opt["strike"],
-                "Net Cost" if is_debit else "Net Credit": abs(cost),
+                "Long Strike": long_strike,
+                "Short Strike": short_strike,
+                "Net Cost" if is_debit else "Net Credit": abs(cost) if is_debit else -cost,
                 "Max Profit": max_profit,
                 "Max Loss": max_loss,
                 "Cost-to-Profit Ratio": cost_to_profit
             })
-    
     if not data:
         return pd.DataFrame()
-    
     df = pd.DataFrame(data)
     df.set_index(["Long Strike", "Short Strike"], inplace=True)
     return df
@@ -487,7 +484,6 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
             elif "bear put" in strategy_key:  # Long Put Spread
                 position_value = (black_scholes(price, k1, T, r, sigma, "put") - black_scholes(price, k2, T, r, sigma, "put"))
 
-
             position_value *= 100 * num_contracts
 
         elif "butterfly" in strategy_key or "condor" in strategy_key:
@@ -534,7 +530,7 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
     plot_range_pct = st.session_state.get("plot_range_pct", 0.3)
 
     prices = np.linspace(max(0.1, current_price * (1 - plot_range_pct)), current_price * (1 + plot_range_pct), 50)
-    times = np.linspace(0, expiration_days, 20)
+    times = np.linspace(expiration_days, 0.0001, 20)
     X, Y = np.meshgrid(prices, times)
     Z = np.zeros_like(X)
 
@@ -543,7 +539,7 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
     for i in range(len(times)):
         for j in range(len(prices)):
             price = X[i, j]
-            T = (expiration_days - Y[i, j]) / 365.0
+            T = Y[i, j] / 365.0
             T = max(T, 1e-9)  # Ensure T is always positive to avoid division by zero
             Z[i, j] = (strategy_value(price, T, iv) - net_entry) / scale_factor  # Scale values
 
