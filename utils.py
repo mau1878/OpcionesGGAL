@@ -512,7 +512,9 @@ def visualize_3d_payoff(strategy_result, current_price, expiration_days, iv=DEFA
         return strategy_value(current_price, expiration_days / 365.0, sigma) - net_entry
 
     try:
-        result = minimize_scalar(lambda sigma: abs(objective(sigma)), bounds=(0.01, 10.0), tol=1e-5)
+        # REPLACE the minimize_scalar line in visualize_3d_payoff in utils.py to use method='bounded'.
+
+        result = minimize_scalar(lambda sigma: abs(objective(sigma)), bounds=(0.01, 10.0), method='bounded', tol=1e-5)
         calibrated_iv = result.x
         if calibrated_iv > 0 and not np.isnan(calibrated_iv) and result.success:
             iv = calibrated_iv
