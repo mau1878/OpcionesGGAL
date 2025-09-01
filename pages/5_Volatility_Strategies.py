@@ -70,7 +70,8 @@ with tab1:
                         logger.info(f"Visualizing row {idx}: {row}")
                         result = row.to_dict()
                         # Use edited_df index value as strike for Straddle
-                        strike = edited_df.index[idx]
+                        strike = edited_df.index.tolist()[idx]  # Explicitly get strike from index list
+                        logger.info(f"Extracted strike for idx {idx}: {strike}")
                         result["strikes"] = [float(strike)] if pd.notna(strike) else []
                         if not result["strikes"]:
                             logger.error(f"Invalid strike value: {strike}")
