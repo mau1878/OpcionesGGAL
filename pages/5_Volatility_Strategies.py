@@ -33,14 +33,11 @@ with tab1:
             edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}")
         edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: x)  # Raw number
 
-        # Convert MultiIndex to a simple index
+        # Convert MultiIndex to a simple index (Straddle typically has a single strike, so no need for multi-level)
         if isinstance(edited_df.index, pd.MultiIndex):
             edited_df = edited_df.reset_index()
-            edited_df['Strikes'] = edited_df.apply(
-                lambda row: f"{row['level_0']}" if 'level_0' in row else str(row.name),
-                axis=1
-            )
-            edited_df = edited_df.drop(columns=['level_0'] if 'level_0' in edited_df.columns else [])
+            # For Straddle, the index is the strike, no need to create a Strikes column
+            edited_df = edited_df.rename(columns={'level_0': 'Strike'}) if 'level_0' in edited_df.columns else edited_df
 
         # Add a visualization column
         edited_df['Visualize'] = False
@@ -59,10 +56,16 @@ with tab1:
                 if isinstance(idx, int) and 0 <= idx < len(edited_df):
                     row = edited_df.iloc[idx]
                     visualize_state = edited_rows[idx].get('Visualize', False)
+                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}, row.name={row.name}, Columns={row.index.tolist()}")
                     if visualize_state:
                         logger.info(f"Visualizing row {idx}: {row}")
                         result = row.to_dict()
-                        result["strikes"] = [float(row['Strikes'])]
+                        # Use row.name (strike value) for Straddle
+                        result["strikes"] = [float(row.name)] if pd.notna(row.name) else []
+                        if not result["strikes"]:
+                            logger.error(f"Invalid strike value: {row.name}")
+                            st.error(f"Invalid strike value: {row.name}")
+                            continue
                         result["num_contracts"] = st.session_state.num_contracts
                         result["raw_net"] = float(result["net_cost"])
                         result["net_cost"] = float(result["net_cost"])
@@ -70,11 +73,15 @@ with tab1:
                         put_opt = next((opt for opt in puts if opt["strike"] == result["strikes"][0]), None)
                         logger.info(f"Options found: call={call_opt}, put={put_opt}")
                         if result and call_opt and put_opt:
-                            utils.visualize_volatility_3d(
-                                result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
-                                "Straddle", options=[call_opt, put_opt], option_actions=["buy", "buy"]
-                            )
-                            logger.info("3D plot triggered successfully for Long Straddle")
+                            try:
+                                utils.visualize_volatility_3d(
+                                    result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
+                                    "Straddle", options=[call_opt, put_opt], option_actions=["buy", "buy"]
+                                )
+                                logger.info("3D plot triggered successfully for Long Straddle")
+                            except Exception as e:
+                                logger.error(f"Error in visualize_volatility_3d: {e}")
+                                st.error(f"Failed to generate 3D plot: {e}")
                         else:
                             logger.warning("Options not found for this combination")
                             st.warning("Selección inválida o datos de opciones no disponibles.")
@@ -151,22 +158,33 @@ with tab2:
                 if isinstance(idx, int) and 0 <= idx < len(edited_df):
                     row = edited_df.iloc[idx]
                     visualize_state = edited_rows[idx].get('Visualize', False)
+                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}, row.name={row.name}, Strikes={row['Strikes']}")
                     if visualize_state:
                         logger.info(f"Visualizing row {idx}: {row}")
                         result = row.to_dict()
-                        result["strikes"] = [float(s) for s in row['Strikes'].split('-')]
+                        # Use Strikes column for Strangle (two strikes)
+                        strikes = [float(s) for s in row['Strikes'].split('-')]
+                        if len(strikes) != 2:
+                            logger.error(f"Invalid strike pair: {row['Strikes']}")
+                            st.error(f"Invalid strike pair: {row['Strikes']}")
+                            continue
+                        result["strikes"] = strikes
                         result["num_contracts"] = st.session_state.num_contracts
                         result["raw_net"] = float(result["net_cost"])
                         result["net_cost"] = float(result["net_cost"])
-                        put_opt = next((opt for opt in puts if opt["strike"] == result["strikes"][0]), None)
-                        call_opt = next((opt for opt in calls if opt["strike"] == result["strikes"][1]), None)
+                        put_opt = next((opt for opt in puts if opt["strike"] == strikes[0]), None)
+                        call_opt = next((opt for opt in calls if opt["strike"] == strikes[1]), None)
                         logger.info(f"Options found: put={put_opt}, call={call_opt}")
                         if result and put_opt and call_opt:
-                            utils.visualize_volatility_3d(
-                                result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
-                                "Strangle", options=[put_opt, call_opt], option_actions=["buy", "buy"]
-                            )
-                            logger.info("3D plot triggered successfully for Long Strangle")
+                            try:
+                                utils.visualize_volatility_3d(
+                                    result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
+                                    "Strangle", options=[put_opt, call_opt], option_actions=["buy", "buy"]
+                                )
+                                logger.info("3D plot triggered successfully for Long Strangle")
+                            except Exception as e:
+                                logger.error(f"Error in visualize_volatility_3d: {e}")
+                                st.error(f"Failed to generate 3D plot: {e}")
                         else:
                             logger.warning("Options not found for this combination")
                             st.warning("Selección inválida o datos de opciones no disponibles.")
