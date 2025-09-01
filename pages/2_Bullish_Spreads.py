@@ -42,8 +42,12 @@ with tab1:
         # Convert MultiIndex to a simple index
         if isinstance(edited_df.index, pd.MultiIndex):
             edited_df = edited_df.reset_index()
-            edited_df['Strikes'] = edited_df['index'].apply(lambda x: f"{x[0]}-{x[1]}")
-            edited_df = edited_df.drop(columns=['index'])
+            # Join the MultiIndex levels into a Strikes column
+            edited_df['Strikes'] = edited_df.apply(
+                lambda row: f"{row['level_0']}-{row['level_1']}" if 'level_1' in row else str(row['level_0']),
+                axis=1
+            )
+            edited_df = edited_df.drop(columns=['level_0', 'level_1'])
 
         # Add a visualization column
         edited_df['Visualize'] = False
@@ -58,12 +62,12 @@ with tab1:
                         "max_profit": float(row["Max Profit"].replace(",", ".")),
                         "max_loss": float(row["Max Loss"].replace(",", ".")),
                         "breakeven": float(row["Breakeven"].replace(",", ".")),
-                        "strikes": row['Strikes'].split('-'),  # Reconstruct strikes from the new column
+                        "strikes": [float(s) for s in row['Strikes'].split('-')],  # Reconstruct strikes
                         "num_contracts": st.session_state.num_contracts,
                         "raw_net": float(row["Net Cost"].replace(",", "."))
                     }
-                    long_opt = next((opt for opt in calls if opt["strike"] == float(result["strikes"][0])), None)
-                    short_opt = next((opt for opt in calls if opt["strike"] == float(result["strikes"][1])), None)
+                    long_opt = next((opt for opt in calls if opt["strike"] == result["strikes"][0]), None)
+                    short_opt = next((opt for opt in calls if opt["strike"] == result["strikes"][1]), None)
                     if long_opt and short_opt:
                         utils.visualize_bullish_3d(
                             result, st.session_state.current_price, st.session_state.expiration_days,
@@ -132,8 +136,12 @@ with tab2:
         # Convert MultiIndex to a simple index
         if isinstance(edited_df.index, pd.MultiIndex):
             edited_df = edited_df.reset_index()
-            edited_df['Strikes'] = edited_df['index'].apply(lambda x: f"{x[0]}-{x[1]}")
-            edited_df = edited_df.drop(columns=['index'])
+            # Join the MultiIndex levels into a Strikes column
+            edited_df['Strikes'] = edited_df.apply(
+                lambda row: f"{row['level_0']}-{row['level_1']}" if 'level_1' in row else str(row['level_0']),
+                axis=1
+            )
+            edited_df = edited_df.drop(columns=['level_0', 'level_1'])
 
         # Add a visualization column
         edited_df['Visualize'] = False
@@ -148,12 +156,12 @@ with tab2:
                         "max_profit": float(row["Max Profit"].replace(",", ".")),
                         "max_loss": float(row["Max Loss"].replace(",", ".")),
                         "breakeven": float(row["Breakeven"].replace(",", ".")),
-                        "strikes": row['Strikes'].split('-'),  # Reconstruct strikes from the new column
+                        "strikes": [float(s) for s in row['Strikes'].split('-')],  # Reconstruct strikes
                         "num_contracts": st.session_state.num_contracts,
                         "raw_net": -float(row["Net Credit"].replace(",", "."))
                     }
-                    short_opt = next((opt for opt in puts if opt["strike"] == float(result["strikes"][1])), None)
-                    long_opt = next((opt for opt in puts if opt["strike"] == float(result["strikes"][0])), None)
+                    short_opt = next((opt for opt in puts if opt["strike"] == result["strikes"][1]), None)
+                    long_opt = next((opt for opt in puts if opt["strike"] == result["strikes"][0]), None)
                     if short_opt and long_opt:
                         utils.visualize_bullish_3d(
                             result, st.session_state.current_price, st.session_state.expiration_days,
