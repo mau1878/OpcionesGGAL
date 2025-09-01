@@ -42,9 +42,10 @@ with tab1:
         # Add a visualization column
         edited_df['Visualize'] = False
 
-        # Initialize separate state for visualize flags
-        if "visualize_flags_straddle" not in st.session_state:
+        # Initialize or resize state for visualize flags
+        if "visualize_flags_straddle" not in st.session_state or len(st.session_state["visualize_flags_straddle"]) != len(edited_df):
             st.session_state["visualize_flags_straddle"] = [False] * len(edited_df)
+        logger.info(f"Resized visualize_flags_straddle to length: {len(st.session_state['visualize_flags_straddle'])}, edited_df length: {len(edited_df)}")
 
         # Define callback function for Long Straddle
         def visualize_callback_straddle():
@@ -107,9 +108,10 @@ with tab1:
             on_change=visualize_callback_straddle,
             width='stretch'
         )
-        # Update flags after edit
+        # Update flags after edit, ensuring safe indexing
         for idx in range(len(edited_df)):
-            st.session_state["visualize_flags_straddle"][idx] = edited_df.at[idx, 'Visualize']
+            if idx < len(st.session_state["visualize_flags_straddle"]):
+                st.session_state["visualize_flags_straddle"][idx] = edited_df.at[idx, 'Visualize']
         logger.info(f"Initial editor state for Straddle: {st.session_state.get('straddle_editor', {})}")
         logger.info(f"Edited DataFrame for Straddle: {edited_df.head().to_dict()}")
     else:
@@ -145,8 +147,9 @@ with tab2:
         edited_df['Visualize'] = False
 
         # Initialize separate state for visualize flags
-        if "visualize_flags_strangle" not in st.session_state:
+        if "visualize_flags_strangle" not in st.session_state or len(st.session_state["visualize_flags_strangle"]) != len(edited_df):
             st.session_state["visualize_flags_strangle"] = [False] * len(edited_df)
+        logger.info(f"Resized visualize_flags_strangle to length: {len(st.session_state['visualize_flags_strangle'])}, edited_df length: {len(edited_df)}")
 
         # Define callback function for Long Strangle
         def visualize_callback_strangle():
@@ -210,9 +213,10 @@ with tab2:
             on_change=visualize_callback_strangle,
             width='stretch'
         )
-        # Update flags after edit
+        # Update flags after edit, ensuring safe indexing
         for idx in range(len(edited_df)):
-            st.session_state["visualize_flags_strangle"][idx] = edited_df.at[idx, 'Visualize']
+            if idx < len(st.session_state["visualize_flags_strangle"]):
+                st.session_state["visualize_flags_strangle"][idx] = edited_df.at[idx, 'Visualize']
         logger.info(f"Initial editor state for Strangle: {st.session_state.get('strangle_editor', {})}")
         logger.info(f"Edited DataFrame for Strangle: {edited_df.head().to_dict()}")
     else:
