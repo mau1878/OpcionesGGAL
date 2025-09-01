@@ -67,8 +67,8 @@ with tab1:
                     if visualize_state:
                         logger.info(f"Visualizing row {idx}: {row}")
                         if "Net Cost" not in row:
-                            logger.error(f"Missing 'Net Cost' column for row {idx}")
-                            st.error(f"Data mismatch: 'Net Cost' not found in row {idx}")
+                            logger.error(f"Missing 'Net Cost' column for row {idx}. Available columns: {row.index.tolist()}")
+                            st.error(f"Data mismatch: 'Net Cost' not found in row {idx}. Check DataFrame structure.")
                             continue
                         result = {
                             "net_cost": float(row["Net Cost"].replace(",", ".")),
@@ -115,6 +115,7 @@ with tab1:
             width='stretch'
         )
         logger.info(f"Initial editor state for Bull Call Spread: {st.session_state.get('bull_call_spread_editor_unique', {})}")
+        logger.info(f"Edited DataFrame for Bull Call Spread: {edited_df.head().to_dict()}")
     else:
         st.warning("No hay datos disponibles para Bull Call Spread. Asegúrese de que hay suficientes opciones call en el rango seleccionado o intente actualizar los datos.")
         logger.warning(f"No data for Bull Call Spread. Filtered calls: {len(calls)}, Strikes: {min_strike:.2f}-{max_strike:.2f}, Expiration: {st.session_state.selected_exp}")
@@ -230,6 +231,7 @@ with tab2:
             width='stretch'
         )
         logger.info(f"Initial editor state for Bull Put Spread: {st.session_state.get('bull_put_spread_editor_unique', {})}")
+        logger.info(f"Edited DataFrame for Bull Put Spread: {edited_df.head().to_dict()}")
     else:
         st.warning("No hay datos disponibles para Bull Put Spread. Asegúrese de que hay suficientes opciones put en el rango seleccionado o intente actualizar los datos.")
         logger.warning(f"No data for Bull Put Spread. Filtered puts: {len(puts)}, Strikes: {min_strike:.2f}-{max_strike:.2f}, Expiration: {st.session_state.selected_exp}")
