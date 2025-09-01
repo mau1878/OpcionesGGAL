@@ -74,6 +74,7 @@ with tab1:
                             st.error(f"Invalid strike value: {row.name}")
                             continue
                         strike = result["strikes"][0]
+                        logger.info(f"Validating strike: {strike}")
                         if strike not in call_strikes or strike not in put_strikes:
                             logger.warning(f"Strike {strike} not found in calls or puts")
                             st.warning(f"Strike {strike} not available in option data.")
@@ -183,6 +184,7 @@ with tab2:
                             st.error(f"Invalid strike pair: {row['Strikes']}")
                             continue
                         result["strikes"] = strikes
+                        logger.info(f"Validating strikes: {strikes}")
                         if strikes[0] not in put_strikes or strikes[1] not in call_strikes:
                             logger.warning(f"Strikes {strikes} not found in puts or calls")
                             st.warning(f"Strikes {strikes} not available in option data.")
