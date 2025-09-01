@@ -52,18 +52,21 @@ with tab1:
         # Add a visualization column
         edited_df['Visualize'] = False
 
-        # Define callback function for Bull Call Spread with debug
-        def visualize_callback_call(edited_df_local):
+        # Initialize separate state for visualize flags
+        if "visualize_flags_call" not in st.session_state:
+            st.session_state["visualize_flags_call"] = [False] * len(edited_df)
+
+        # Define callback function for Bull Call Spread
+        def visualize_callback_call():
             logger.info("Visualize callback triggered for Bull Call Spread")
             edited = st.session_state.get("bull_call_spread_editor_unique", {})
             logger.info(f"Edited state: {edited}")
             edited_rows = edited.get('edited_rows', {})
-            logger.info(f"Edited rows: {edited_rows}")
             for idx in edited_rows:
-                if isinstance(idx, int) and 0 <= idx < len(edited_df_local):
-                    row = edited_df_local.iloc[idx]
+                if isinstance(idx, int) and 0 <= idx < len(edited_df):
+                    row = edited_df.iloc[idx]
                     visualize_state = edited_rows[idx].get('Visualize', False)
-                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}, Columns: {edited_df_local.columns.tolist()}")
+                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}, Columns: {edited_df.columns.tolist()}")
                     if visualize_state:
                         logger.info(f"Visualizing row {idx}: {row}")
                         if "Net Cost" not in row:
@@ -96,11 +99,15 @@ with tab1:
                         else:
                             logger.warning("Options not found for this combination")
                             st.warning("Datos de opciones no disponibles para esta combinación.")
-                        # Reset the checkbox in the local DataFrame
-                        edited_df_local.at[idx, 'Visualize'] = False
-                        st.session_state["bull_call_spread_editor_unique"] = edited_df_local.to_dict()
+                        # Reset the checkbox via separate state
+                        st.session_state["visualize_flags_call"][idx] = False
+                        st.experimental_rerun()
 
-        # Use data_editor with callback passing edited_df
+        # Sync visualize flags to DataFrame
+        for idx in range(len(edited_df)):
+            edited_df.at[idx, 'Visualize'] = st.session_state["visualize_flags_call"][idx]
+
+        # Use data_editor with checkbox column
         edited_df = st.data_editor(
             edited_df,
             column_config={
@@ -112,9 +119,11 @@ with tab1:
             },
             key="bull_call_spread_editor_unique",
             on_change=visualize_callback_call,
-            args=(edited_df,),  # Pass the local edited_df to the callback
             width='stretch'
         )
+        # Update flags after edit
+        for idx in range(len(edited_df)):
+            st.session_state["visualize_flags_call"][idx] = edited_df.at[idx, 'Visualize']
         logger.info(f"Initial editor state for Bull Call Spread: {st.session_state.get('bull_call_spread_editor_unique', {})}")
         logger.info(f"Edited DataFrame for Bull Call Spread: {edited_df.head().to_dict()}")
     else:
@@ -169,23 +178,26 @@ with tab2:
         # Add a visualization column
         edited_df['Visualize'] = False
 
-        # Define callback function for Bull Put Spread with debug
-        def visualize_callback_put(edited_df_local):
+        # Initialize separate state for visualize flags
+        if "visualize_flags_put" not in st.session_state:
+            st.session_state["visualize_flags_put"] = [False] * len(edited_df)
+
+        # Define callback function for Bull Put Spread
+        def visualize_callback_put():
             logger.info("Visualize callback triggered for Bull Put Spread")
             edited = st.session_state.get("bull_put_spread_editor_unique", {})
             logger.info(f"Edited state: {edited}")
             edited_rows = edited.get('edited_rows', {})
-            logger.info(f"Edited rows: {edited_rows}")
             for idx in edited_rows:
-                if isinstance(idx, int) and 0 <= idx < len(edited_df_local):
-                    row = edited_df_local.iloc[idx]
+                if isinstance(idx, int) and 0 <= idx < len(edited_df):
+                    row = edited_df.iloc[idx]
                     visualize_state = edited_rows[idx].get('Visualize', False)
-                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}, Columns: {edited_df_local.columns.tolist()}")
+                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}, Columns: {edited_df.columns.tolist()}")
                     if visualize_state:
                         logger.info(f"Visualizing row {idx}: {row}")
                         if "Net Credit" not in row:
-                            logger.error(f"Missing 'Net Credit' column for row {idx}")
-                            st.error(f"Data mismatch: 'Net Credit' not found in row {idx}")
+                            logger.error(f"Missing 'Net Credit' column for row {idx}. Available columns: {row.index.tolist()}")
+                            st.error(f"Data mismatch: 'Net Credit' not found in row {idx}. Check DataFrame structure.")
                             continue
                         result = {
                             "net_cost": -float(row["Net Credit"].replace(",", ".")),
@@ -213,11 +225,15 @@ with tab2:
                         else:
                             logger.warning("Options not found for this Put Spread combination")
                             st.warning("Datos de opciones no disponibles para esta combinación.")
-                        # Reset the checkbox in the local DataFrame
-                        edited_df_local.at[idx, 'Visualize'] = False
-                        st.session_state["bull_put_spread_editor_unique"] = edited_df_local.to_dict()
+                        # Reset via separate state
+                        st.session_state["visualize_flags_put"][idx] = False
+                        st.experimental_rerun()
 
-        # Use data_editor with callback passing edited_df
+        # Sync visualize flags to DataFrame
+        for idx in range(len(edited_df)):
+            edited_df.at[idx, 'Visualize'] = st.session_state["visualize_flags_put"][idx]
+
+        # Use data_editor with checkbox column
         edited_df = st.data_editor(
             edited_df,
             column_config={
@@ -229,9 +245,11 @@ with tab2:
             },
             key="bull_put_spread_editor_unique",
             on_change=visualize_callback_put,
-            args=(edited_df,),  # Pass the local edited_df to the callback
             width='stretch'
         )
+        # Update flags after edit
+        for idx in range(len(edited_df)):
+            st.session_state["visualize_flags_put"][idx] = edited_df.at[idx, 'Visualize']
         logger.info(f"Initial editor state for Bull Put Spread: {st.session_state.get('bull_put_spread_editor_unique', {})}")
         logger.info(f"Edited DataFrame for Bull Put Spread: {edited_df.head().to_dict()}")
     else:
