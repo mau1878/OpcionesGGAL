@@ -52,11 +52,14 @@ with tab1:
         # Add a visualization column
         edited_df['Visualize'] = False
 
-        # Define callback function
+        # Define callback function with debugging
         def visualize_callback():
+            logger.info("Visualize callback triggered")
             edited = st.session_state.get("bull_call_spread_editor", {})
+            logger.info(f"Edited state: {edited}")
             for idx, row in edited_df.iterrows():
                 if edited.get(str(idx), {}).get('Visualize', False):
+                    logger.info(f"Visualizing row {idx}: {row}")
                     result = {
                         "net_cost": float(row["Net Cost"].replace(",", ".")),
                         "max_profit": float(row["Max Profit"].replace(",", ".")),
@@ -69,16 +72,23 @@ with tab1:
                     long_opt = next((opt for opt in calls if opt["strike"] == result["strikes"][0]), None)
                     short_opt = next((opt for opt in calls if opt["strike"] == result["strikes"][1]), None)
                     if long_opt and short_opt:
-                        utils.visualize_bullish_3d(
-                            result, st.session_state.current_price, st.session_state.expiration_days,
-                            st.session_state.iv, "Bull Call Spread",
-                            options=[long_opt, short_opt], option_actions=["buy", "sell"]
-                        )
+                        logger.info(f"Options found: long={long_opt}, short={short_opt}")
+                        try:
+                            utils.visualize_bullish_3d(
+                                result, st.session_state.current_price, st.session_state.expiration_days,
+                                st.session_state.iv, "Bull Call Spread",
+                                options=[long_opt, short_opt], option_actions=["buy", "sell"]
+                            )
+                            logger.info("3D plot generated successfully")
+                        except Exception as e:
+                            logger.error(f"Error in visualize_bullish_3d: {e}")
+                            st.error(f"Failed to generate 3D plot: {e}")
                     else:
+                        logger.warning("Options not found for this combination")
                         st.warning("Datos de opciones no disponibles para esta combinación.")
-                    # Reset the checkbox
+                    # Reset the checkbox without rerun
                     edited_df.at[idx, 'Visualize'] = False
-                    st.experimental_rerun()  # Rerun to update the editor state
+                    st.session_state["bull_call_spread_editor"] = edited_df.to_dict()
 
         # Use data_editor with checkbox column
         edited_df = st.data_editor(
@@ -92,7 +102,7 @@ with tab1:
             },
             key="bull_call_spread_editor",
             on_change=visualize_callback,
-            width='stretch'  # Replaced use_container_width=True
+            width='stretch'
         )
     else:
         st.warning("No hay datos disponibles para Bull Call Spread. Asegúrese de que hay suficientes opciones call en el rango seleccionado o intente actualizar los datos.")
@@ -146,11 +156,14 @@ with tab2:
         # Add a visualization column
         edited_df['Visualize'] = False
 
-        # Define callback function
+        # Define callback function with debugging
         def visualize_callback_put():
+            logger.info("Visualize callback triggered for Put Spread")
             edited = st.session_state.get("bull_put_spread_editor", {})
+            logger.info(f"Edited state: {edited}")
             for idx, row in edited_df.iterrows():
                 if edited.get(str(idx), {}).get('Visualize', False):
+                    logger.info(f"Visualizing row {idx}: {row}")
                     result = {
                         "net_cost": -float(row["Net Credit"].replace(",", ".")),
                         "max_profit": float(row["Max Profit"].replace(",", ".")),
@@ -163,16 +176,23 @@ with tab2:
                     short_opt = next((opt for opt in puts if opt["strike"] == result["strikes"][1]), None)
                     long_opt = next((opt for opt in puts if opt["strike"] == result["strikes"][0]), None)
                     if short_opt and long_opt:
-                        utils.visualize_bullish_3d(
-                            result, st.session_state.current_price, st.session_state.expiration_days,
-                            st.session_state.iv, "Bull Put Spread",
-                            options=[short_opt, long_opt], option_actions=["sell", "buy"]
-                        )
+                        logger.info(f"Options found: short={short_opt}, long={long_opt}")
+                        try:
+                            utils.visualize_bullish_3d(
+                                result, st.session_state.current_price, st.session_state.expiration_days,
+                                st.session_state.iv, "Bull Put Spread",
+                                options=[short_opt, long_opt], option_actions=["sell", "buy"]
+                            )
+                            logger.info("3D plot generated successfully for Put Spread")
+                        except Exception as e:
+                            logger.error(f"Error in visualize_bullish_3d for Put Spread: {e}")
+                            st.error(f"Failed to generate 3D plot for Put Spread: {e}")
                     else:
+                        logger.warning("Options not found for this Put Spread combination")
                         st.warning("Datos de opciones no disponibles para esta combinación.")
-                    # Reset the checkbox
+                    # Reset the checkbox without rerun
                     edited_df.at[idx, 'Visualize'] = False
-                    st.experimental_rerun()  # Rerun to update the editor state
+                    st.session_state["bull_put_spread_editor"] = edited_df.to_dict()
 
         # Use data_editor with checkbox column
         edited_df = st.data_editor(
@@ -186,7 +206,7 @@ with tab2:
             },
             key="bull_put_spread_editor",
             on_change=visualize_callback_put,
-            width='stretch'  # Replaced use_container_width=True
+            width='stretch'
         )
     else:
         st.warning("No hay datos disponibles para Bull Put Spread. Asegúrese de que hay suficientes opciones put en el rango seleccionado o intente actualizar los datos.")
