@@ -111,7 +111,11 @@ with tab1:
                             st.warning("Datos de opciones no disponibles para esta combinación.")
                         # Reset the checkbox via separate state
                         st.session_state["visualize_flags_call"][idx] = False
-                        st.experimental_rerun()
+                        try:
+                            st.rerun()  # Use st.rerun() instead of experimental_rerun
+                        except AttributeError:
+                            logger.error("st.rerun() not available, please update Streamlit")
+                            st.error("Error: Please update Streamlit to version 1.30.0 or later.")
 
         # Sync visualize flags to DataFrame
         for idx in range(len(edited_df)):
@@ -247,7 +251,11 @@ with tab2:
                             st.warning("Datos de opciones no disponibles para esta combinación.")
                         # Reset the checkbox via separate state
                         st.session_state["visualize_flags_put"][idx] = False
-                        st.experimental_rerun()
+                        try:
+                            st.rerun()  # Use st.rerun() instead of experimental_rerun
+                        except AttributeError:
+                            logger.error("st.rerun() not available, please update Streamlit")
+                            st.error("Error: Please update Streamlit to version 1.30.0 or later.")
 
         # Sync visualize flags to DataFrame
         for idx in range(len(edited_df)):
