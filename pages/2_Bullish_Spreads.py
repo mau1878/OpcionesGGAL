@@ -39,49 +39,51 @@ with tab1:
             edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}")
         edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: f"{x:.2%}")
 
-        # Add a visualization column with a button callback
-        def visualize_callback(row):
-            result = {
-                "net_cost": float(row["Net Cost"].replace(",", ".")),
-                "max_profit": float(row["Max Profit"].replace(",", ".")),
-                "max_loss": float(row["Max Loss"].replace(",", ".")),
-                "breakeven": float(row["Breakeven"].replace(",", ".")),
-                "strikes": list(row.name),  # Use index as strikes
-                "num_contracts": st.session_state.num_contracts,
-                "raw_net": float(row["Net Cost"].replace(",", "."))
-            }
-            long_opt = next((opt for opt in calls if opt["strike"] == row.name[0]), None)
-            short_opt = next((opt for opt in calls if opt["strike"] == row.name[1]), None)
-            if long_opt and short_opt:
-                utils.visualize_bullish_3d(
-                    result, st.session_state.current_price, st.session_state.expiration_days,
-                    st.session_state.iv, "Bull Call Spread",
-                    options=[long_opt, short_opt], option_actions=["buy", "sell"]
-                )
-            else:
-                st.warning("Datos de opciones no disponibles para esta combinación.")
+        # Add a visualization column
+        edited_df['Visualize'] = False
 
-        # Convert to editable DataFrame with a button column
-        edited_df['Visualize'] = False  # Initial state for button action
+        # Define callback function
+        def visualize_callback():
+            edited = st.session_state.get("bull_call_spread_editor", {})
+            for idx, row in edited_df.iterrows():
+                if edited.get(str(idx), {}).get('Visualize', False):
+                    result = {
+                        "net_cost": float(row["Net Cost"].replace(",", ".")),
+                        "max_profit": float(row["Max Profit"].replace(",", ".")),
+                        "max_loss": float(row["Max Loss"].replace(",", ".")),
+                        "breakeven": float(row["Breakeven"].replace(",", ".")),
+                        "strikes": list(idx),  # Use index as strikes
+                        "num_contracts": st.session_state.num_contracts,
+                        "raw_net": float(row["Net Cost"].replace(",", "."))
+                    }
+                    long_opt = next((opt for opt in calls if opt["strike"] == idx[0]), None)
+                    short_opt = next((opt for opt in calls if opt["strike"] == idx[1]), None)
+                    if long_opt and short_opt:
+                        utils.visualize_bullish_3d(
+                            result, st.session_state.current_price, st.session_state.expiration_days,
+                            st.session_state.iv, "Bull Call Spread",
+                            options=[long_opt, short_opt], option_actions=["buy", "sell"]
+                        )
+                    else:
+                        st.warning("Datos de opciones no disponibles para esta combinación.")
+                    # Reset the checkbox
+                    edited_df.at[idx, 'Visualize'] = False
+                    st.experimental_rerun()  # Rerun to update the editor state
+
+        # Use data_editor with checkbox column
         edited_df = st.data_editor(
             edited_df,
             column_config={
                 "Visualize": st.column_config.CheckboxColumn(
                     "Visualize 3D",
                     help="Check to generate 3D plot",
-                    on_change=visualize_callback,
-                    args=[edited_df.loc[edited_df.index[i]] for i in range(len(edited_df))],
                     disabled=False
                 )
             },
             key="bull_call_spread_editor",
+            on_change=visualize_callback,
             use_container_width=True
         )
-        # Trigger visualization if any row's Visualize is checked
-        for idx, row in edited_df.iterrows():
-            if row['Visualize']:
-                visualize_callback(row)
-                edited_df.at[idx, 'Visualize'] = False  # Reset after visualization
     else:
         st.warning("No hay datos disponibles para Bull Call Spread. Asegúrese de que hay suficientes opciones call en el rango seleccionado o intente actualizar los datos.")
         logger.warning(f"No data for Bull Call Spread. Filtered calls: {len(calls)}, Strikes: {min_strike:.2f}-{max_strike:.2f}, Expiration: {st.session_state.selected_exp}")
@@ -121,46 +123,51 @@ with tab2:
             edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}")
         edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: f"{x:.2%}")
 
-        def visualize_callback_put(row):
-            result = {
-                "net_cost": -float(row["Net Credit"].replace(",", ".")),
-                "max_profit": float(row["Max Profit"].replace(",", ".")),
-                "max_loss": float(row["Max Loss"].replace(",", ".")),
-                "breakeven": float(row["Breakeven"].replace(",", ".")),
-                "strikes": list(row.name),
-                "num_contracts": st.session_state.num_contracts,
-                "raw_net": -float(row["Net Credit"].replace(",", "."))
-            }
-            short_opt = next((opt for opt in puts if opt["strike"] == row.name[1]), None)
-            long_opt = next((opt for opt in puts if opt["strike"] == row.name[0]), None)
-            if short_opt and long_opt:
-                utils.visualize_bullish_3d(
-                    result, st.session_state.current_price, st.session_state.expiration_days,
-                    st.session_state.iv, "Bull Put Spread",
-                    options=[short_opt, long_opt], option_actions=["sell", "buy"]
-                )
-            else:
-                st.warning("Datos de opciones no disponibles para esta combinación.")
-
+        # Add a visualization column
         edited_df['Visualize'] = False
+
+        # Define callback function
+        def visualize_callback_put():
+            edited = st.session_state.get("bull_put_spread_editor", {})
+            for idx, row in edited_df.iterrows():
+                if edited.get(str(idx), {}).get('Visualize', False):
+                    result = {
+                        "net_cost": -float(row["Net Credit"].replace(",", ".")),
+                        "max_profit": float(row["Max Profit"].replace(",", ".")),
+                        "max_loss": float(row["Max Loss"].replace(",", ".")),
+                        "breakeven": float(row["Breakeven"].replace(",", ".")),
+                        "strikes": list(idx),
+                        "num_contracts": st.session_state.num_contracts,
+                        "raw_net": -float(row["Net Credit"].replace(",", "."))
+                    }
+                    short_opt = next((opt for opt in puts if opt["strike"] == idx[1]), None)
+                    long_opt = next((opt for opt in puts if opt["strike"] == idx[0]), None)
+                    if short_opt and long_opt:
+                        utils.visualize_bullish_3d(
+                            result, st.session_state.current_price, st.session_state.expiration_days,
+                            st.session_state.iv, "Bull Put Spread",
+                            options=[short_opt, long_opt], option_actions=["sell", "buy"]
+                        )
+                    else:
+                        st.warning("Datos de opciones no disponibles para esta combinación.")
+                    # Reset the checkbox
+                    edited_df.at[idx, 'Visualize'] = False
+                    st.experimental_rerun()  # Rerun to update the editor state
+
+        # Use data_editor with checkbox column
         edited_df = st.data_editor(
             edited_df,
             column_config={
                 "Visualize": st.column_config.CheckboxColumn(
                     "Visualize 3D",
                     help="Check to generate 3D plot",
-                    on_change=visualize_callback_put,
-                    args=[edited_df.loc[edited_df.index[i]] for i in range(len(edited_df))],
                     disabled=False
                 )
             },
             key="bull_put_spread_editor",
+            on_change=visualize_callback_put,
             use_container_width=True
         )
-        for idx, row in edited_df.iterrows():
-            if row['Visualize']:
-                visualize_callback_put(row)
-                edited_df.at[idx, 'Visualize'] = False
     else:
         st.warning("No hay datos disponibles para Bull Put Spread. Asegúrese de que hay suficientes opciones put en el rango seleccionado o intente actualizar los datos.")
         logger.warning(f"No data for Bull Put Spread. Filtered puts: {len(puts)}, Strikes: {min_strike:.2f}-{max_strike:.2f}, Expiration: {st.session_state.selected_exp}")
