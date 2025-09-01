@@ -33,16 +33,22 @@ with tab1:
         detailed_df_call = pd.DataFrame()
 
     if not detailed_df_call.empty:
+        # Apply formatting to the DataFrame
+        edited_df = detailed_df_call.copy()
+        for col in ["Net Cost", "Max Profit", "Max Loss", "Breakeven"]:
+            edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}")
+        edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: f"{x:.2%}")
+
         # Add a visualization column with a button callback
         def visualize_callback(row):
             result = {
-                "net_cost": row["Net Cost"],
-                "max_profit": row["Max Profit"],
-                "max_loss": row["Max Loss"],
-                "breakeven": row["Breakeven"],
+                "net_cost": float(row["Net Cost"].replace(",", ".")),
+                "max_profit": float(row["Max Profit"].replace(",", ".")),
+                "max_loss": float(row["Max Loss"].replace(",", ".")),
+                "breakeven": float(row["Breakeven"].replace(",", ".")),
                 "strikes": list(row.name),  # Use index as strikes
                 "num_contracts": st.session_state.num_contracts,
-                "raw_net": row["Net Cost"]
+                "raw_net": float(row["Net Cost"].replace(",", "."))
             }
             long_opt = next((opt for opt in calls if opt["strike"] == row.name[0]), None)
             short_opt = next((opt for opt in calls if opt["strike"] == row.name[1]), None)
@@ -56,13 +62,9 @@ with tab1:
                 st.warning("Datos de opciones no disponibles para esta combinación.")
 
         # Convert to editable DataFrame with a button column
-        edited_df = detailed_df_call.copy()
         edited_df['Visualize'] = False  # Initial state for button action
         edited_df = st.data_editor(
-            edited_df.style.format({
-                "Net Cost": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}",
-                "Cost-to-Profit Ratio": "{:.2%}", "Breakeven": "{:.2f}"
-            }).to_dict(),
+            edited_df,
             column_config={
                 "Visualize": st.column_config.CheckboxColumn(
                     "Visualize 3D",
@@ -113,15 +115,21 @@ with tab2:
         detailed_df_put = pd.DataFrame()
 
     if not detailed_df_put.empty:
+        # Apply formatting to the DataFrame
+        edited_df = detailed_df_put.copy()
+        for col in ["Net Credit", "Max Profit", "Max Loss", "Breakeven"]:
+            edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}")
+        edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: f"{x:.2%}")
+
         def visualize_callback_put(row):
             result = {
-                "net_cost": -row["Net Credit"],
-                "max_profit": row["Max Profit"],
-                "max_loss": row["Max Loss"],
-                "breakeven": row["Breakeven"],
+                "net_cost": -float(row["Net Credit"].replace(",", ".")),
+                "max_profit": float(row["Max Profit"].replace(",", ".")),
+                "max_loss": float(row["Max Loss"].replace(",", ".")),
+                "breakeven": float(row["Breakeven"].replace(",", ".")),
                 "strikes": list(row.name),
                 "num_contracts": st.session_state.num_contracts,
-                "raw_net": -row["Net Credit"]
+                "raw_net": -float(row["Net Credit"].replace(",", "."))
             }
             short_opt = next((opt for opt in puts if opt["strike"] == row.name[1]), None)
             long_opt = next((opt for opt in puts if opt["strike"] == row.name[0]), None)
@@ -134,13 +142,9 @@ with tab2:
             else:
                 st.warning("Datos de opciones no disponibles para esta combinación.")
 
-        edited_df = detailed_df_put.copy()
         edited_df['Visualize'] = False
         edited_df = st.data_editor(
-            edited_df.style.format({
-                "Net Credit": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}",
-                "Cost-to-Profit Ratio": "{:.2%}", "Breakeven": "{:.2f}"
-            }).to_dict(),
+            edited_df,
             column_config={
                 "Visualize": st.column_config.CheckboxColumn(
                     "Visualize 3D",
