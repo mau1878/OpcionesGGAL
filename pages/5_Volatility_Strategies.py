@@ -45,7 +45,7 @@ with tab1:
             edited_df = edited_df.reset_index()
             edited_df = edited_df.rename(columns={'level_0': 'Strike'})  # Assume first level is strike
             edited_df.set_index('Strike', inplace=True)
-        logger.info(f"Straddle DataFrame index after processing: {edited_df.index.tolist()}")
+        logger.info(f"Straddle DataFrame index after processing: {edited_df.index.tolist()}, index type: {type(edited_df.index)}")
 
         # Add a visualization column
         edited_df['Visualize'] = False
@@ -70,7 +70,7 @@ with tab1:
                         logger.info(f"Visualizing row {idx}: {row}")
                         result = row.to_dict()
                         # Use edited_df index value as strike for Straddle
-                        strike = edited_df.index.tolist()[idx]  # Explicitly get strike from index list
+                        strike = edited_df.index[idx]  # Revert to direct index access
                         logger.info(f"Extracted strike for idx {idx}: {strike}")
                         result["strikes"] = [float(strike)] if pd.notna(strike) else []
                         if not result["strikes"]:
