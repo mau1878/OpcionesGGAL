@@ -15,6 +15,12 @@ if 'filtered_calls' not in st.session_state or not st.session_state.filtered_cal
 calls = st.session_state.filtered_calls
 puts = st.session_state.filtered_puts
 
+# Log available strikes for debugging
+call_strikes = {opt["strike"] for opt in calls}
+put_strikes = {opt["strike"] for opt in puts}
+logger.info(f"Available call strikes: {call_strikes}")
+logger.info(f"Available put strikes: {put_strikes}")
+
 tab1, tab2 = st.tabs(["Straddle", "Strangle"])
 
 with tab1:
@@ -67,11 +73,16 @@ with tab1:
                             logger.error(f"Invalid strike value: {row.name}")
                             st.error(f"Invalid strike value: {row.name}")
                             continue
+                        strike = result["strikes"][0]
+                        if strike not in call_strikes or strike not in put_strikes:
+                            logger.warning(f"Strike {strike} not found in calls or puts")
+                            st.warning(f"Strike {strike} not available in option data.")
+                            continue
                         result["num_contracts"] = st.session_state.num_contracts
                         result["raw_net"] = float(result["net_cost"])
                         result["net_cost"] = float(result["net_cost"])
-                        call_opt = next((opt for opt in calls if opt["strike"] == result["strikes"][0]), None)
-                        put_opt = next((opt for opt in puts if opt["strike"] == result["strikes"][0]), None)
+                        call_opt = next((opt for opt in calls if abs(opt["strike"] - strike) < 0.01), None)  # Allow small float precision
+                        put_opt = next((opt for opt in puts if abs(opt["strike"] - strike) < 0.01), None)
                         logger.info(f"Options found: call={call_opt}, put={put_opt}")
                         if result and call_opt and put_opt:
                             try:
@@ -172,11 +183,15 @@ with tab2:
                             st.error(f"Invalid strike pair: {row['Strikes']}")
                             continue
                         result["strikes"] = strikes
+                        if strikes[0] not in put_strikes or strikes[1] not in call_strikes:
+                            logger.warning(f"Strikes {strikes} not found in puts or calls")
+                            st.warning(f"Strikes {strikes} not available in option data.")
+                            continue
                         result["num_contracts"] = st.session_state.num_contracts
                         result["raw_net"] = float(result["net_cost"])
                         result["net_cost"] = float(result["net_cost"])
-                        put_opt = next((opt for opt in puts if opt["strike"] == strikes[0]), None)
-                        call_opt = next((opt for opt in calls if opt["strike"] == strikes[1]), None)
+                        put_opt = next((opt for opt in puts if abs(opt["strike"] - strikes[0]) < 0.01), None)
+                        call_opt = next((opt for opt in calls if abs(opt["strike"] - strikes[1]) < 0.01), None)
                         logger.info(f"Options found: put={put_opt}, call={call_opt}")
                         if result and put_opt and call_opt:
                             try:
