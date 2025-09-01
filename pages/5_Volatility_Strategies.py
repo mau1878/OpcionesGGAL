@@ -1,5 +1,9 @@
 import streamlit as st
 import utils
+import logging
+import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="Volatility Strategies", layout="wide")
 st.title("Estrategias de Volatilidad: Straddle & Strangle")
@@ -15,68 +19,184 @@ tab1, tab2 = st.tabs(["Straddle", "Strangle"])
 
 with tab1:
     st.subheader("Long Straddle")
-    df = utils.create_volatility_table(calls, puts, utils.calculate_straddle, st.session_state.num_contracts, st.session_state.commission_rate)
+    try:
+        df = utils.create_volatility_table(calls, puts, utils.calculate_straddle, st.session_state.num_contracts, st.session_state.commission_rate)
+    except Exception as e:
+        st.error(f"Error al crear la tabla de Long Straddle: {e}")
+        logger.error(f"Error in create_volatility_table: {e}")
+        df = pd.DataFrame()
+
     if not df.empty:
-        styled_df = df.style.format({
-            "net_cost": "{:.2f}",
-            "max_loss": "{:.2f}",
-            "lower_breakeven": "{:.2f}",
-            "upper_breakeven": "{:.2f}",
-            "Cost-to-Profit Ratio": "{:.2%}"
-        })
-        st.dataframe(styled_df)
-    else:
-        st.dataframe(df)
-        st.warning("No hay datos disponibles para Long Straddle. Verifique si hay strikes coincidentes para calls y puts en el rango seleccionado.")
-    if not df.empty:
-        options = df.index
-        selected = st.selectbox("Selecciona una combinación para visualizar", options, key="straddle_select")
-        row = df.loc[selected]
-        result = row.to_dict()
-        result["strikes"] = [selected] if isinstance(selected, (int, float)) else list(selected)
-        result["num_contracts"] = st.session_state.num_contracts
-        result["raw_net"] = result["net_cost"]
-        # Find options corresponding to selected strike
-        call_opt = next((opt for opt in calls if opt["strike"] == selected), None)
-        put_opt = next((opt for opt in puts if opt["strike"] == selected), None)
-        if result and call_opt and put_opt:
-            utils.visualize_volatility_3d(
-                result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
-                "Straddle", options=[call_opt, put_opt], option_actions=["buy", "buy"]
+        # Apply formatting to the DataFrame
+        edited_df = df.copy()
+        for col in ["net_cost", "max_loss", "lower_breakeven", "upper_breakeven"]:
+            edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}")
+        edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: x)  # Raw number
+
+        # Convert MultiIndex to a simple index
+        if isinstance(edited_df.index, pd.MultiIndex):
+            edited_df = edited_df.reset_index()
+            edited_df['Strikes'] = edited_df.apply(
+                lambda row: f"{row['level_0']}" if 'level_0' in row else str(row.name),
+                axis=1
             )
-        else:
-            st.warning("Selección inválida o datos de opciones no disponibles.")
+            edited_df = edited_df.drop(columns=['level_0'] if 'level_0' in edited_df.columns else [])
+
+        # Add a visualization column
+        edited_df['Visualize'] = False
+
+        # Initialize separate state for visualize flags
+        if "visualize_flags_straddle" not in st.session_state:
+            st.session_state["visualize_flags_straddle"] = [False] * len(edited_df)
+
+        # Define callback function for Long Straddle
+        def visualize_callback_straddle():
+            logger.info("Visualize callback triggered for Long Straddle")
+            edited = st.session_state.get("straddle_editor", {})
+            logger.info(f"Edited state: {edited}")
+            edited_rows = edited.get('edited_rows', {})
+            for idx in edited_rows:
+                if isinstance(idx, int) and 0 <= idx < len(edited_df):
+                    row = edited_df.iloc[idx]
+                    visualize_state = edited_rows[idx].get('Visualize', False)
+                    if visualize_state:
+                        logger.info(f"Visualizing row {idx}: {row}")
+                        result = row.to_dict()
+                        result["strikes"] = [float(row['Strikes'])]
+                        result["num_contracts"] = st.session_state.num_contracts
+                        result["raw_net"] = float(result["net_cost"])
+                        result["net_cost"] = float(result["net_cost"])
+                        call_opt = next((opt for opt in calls if opt["strike"] == result["strikes"][0]), None)
+                        put_opt = next((opt for opt in puts if opt["strike"] == result["strikes"][0]), None)
+                        logger.info(f"Options found: call={call_opt}, put={put_opt}")
+                        if result and call_opt and put_opt:
+                            utils.visualize_volatility_3d(
+                                result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
+                                "Straddle", options=[call_opt, put_opt], option_actions=["buy", "buy"]
+                            )
+                            logger.info("3D plot triggered successfully for Long Straddle")
+                        else:
+                            logger.warning("Options not found for this combination")
+                            st.warning("Selección inválida o datos de opciones no disponibles.")
+                        # Reset the checkbox via separate state
+                        st.session_state["visualize_flags_straddle"][idx] = False
+                        st.rerun()
+
+        # Sync visualize flags to DataFrame
+        for idx in range(len(edited_df)):
+            edited_df.at[idx, 'Visualize'] = st.session_state["visualize_flags_straddle"][idx]
+
+        # Use data_editor with checkbox column
+        edited_df = st.data_editor(
+            edited_df,
+            column_config={
+                "Visualize": st.column_config.CheckboxColumn(
+                    "Visualize 3D",
+                    help="Check to generate 3D plot",
+                    disabled=False
+                )
+            },
+            key="straddle_editor",
+            on_change=visualize_callback_straddle,
+            width='stretch'
+        )
+        # Update flags after edit
+        for idx in range(len(edited_df)):
+            st.session_state["visualize_flags_straddle"][idx] = edited_df.at[idx, 'Visualize']
+        logger.info(f"Initial editor state for Straddle: {st.session_state.get('straddle_editor', {})}")
+        logger.info(f"Edited DataFrame for Straddle: {edited_df.head().to_dict()}")
+    else:
+        st.warning("No hay datos disponibles para Long Straddle. Verifique si hay strikes coincidentes para calls y puts en el rango seleccionado.")
+        logger.warning("No data for Long Straddle. Filtered calls: {len(calls)}, puts: {len(puts)}")
 
 with tab2:
     st.subheader("Long Strangle")
-    df = utils.create_volatility_table(puts, calls, utils.calculate_strangle, st.session_state.num_contracts, st.session_state.commission_rate)
+    try:
+        df = utils.create_volatility_table(puts, calls, utils.calculate_strangle, st.session_state.num_contracts, st.session_state.commission_rate)
+    except Exception as e:
+        st.error(f"Error al crear la tabla de Long Strangle: {e}")
+        logger.error(f"Error in create_volatility_table: {e}")
+        df = pd.DataFrame()
+
     if not df.empty:
-        styled_df = df.style.format({
-            "net_cost": "{:.2f}",
-            "max_loss": "{:.2f}",
-            "lower_breakeven": "{:.2f}",
-            "upper_breakeven": "{:.2f}",
-            "Cost-to-Profit Ratio": "{:.2%}"
-        })
-        st.dataframe(styled_df)
-    else:
-        st.dataframe(df)
-        st.warning("No hay datos disponibles para Long Strangle. Verifique si hay puts con strikes inferiores a calls en el rango seleccionado.")
-    if not df.empty:
-        options = df.index
-        selected = st.selectbox("Selecciona una combinación para visualizar", options, key="strangle_select")
-        row = df.loc[selected]
-        result = row.to_dict()
-        result["strikes"] = list(selected) if isinstance(selected, tuple) else [selected]
-        result["num_contracts"] = st.session_state.num_contracts
-        result["raw_net"] = result["net_cost"]
-        # Find options corresponding to selected strikes
-        put_opt = next((opt for opt in puts if opt["strike"] == selected[0]), None)
-        call_opt = next((opt for opt in calls if opt["strike"] == selected[1]), None)
-        if result and put_opt and call_opt:
-            utils.visualize_volatility_3d(
-                result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
-                "Strangle", options=[put_opt, call_opt], option_actions=["buy", "buy"]
+        # Apply formatting to the DataFrame
+        edited_df = df.copy()
+        for col in ["net_cost", "max_loss", "lower_breakeven", "upper_breakeven"]:
+            edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}")
+        edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: x)  # Raw number
+
+        # Convert MultiIndex to a simple index
+        if isinstance(edited_df.index, pd.MultiIndex):
+            edited_df = edited_df.reset_index()
+            edited_df['Strikes'] = edited_df.apply(
+                lambda row: f"{row['level_0']}-{row['level_1']}" if 'level_1' in row else str(row['level_0']),
+                axis=1
             )
-        else:
-            st.warning("Selección inválida o datos de opciones no disponibles.")
+            edited_df = edited_df.drop(columns=['level_0', 'level_1'])
+
+        # Add a visualization column
+        edited_df['Visualize'] = False
+
+        # Initialize separate state for visualize flags
+        if "visualize_flags_strangle" not in st.session_state:
+            st.session_state["visualize_flags_strangle"] = [False] * len(edited_df)
+
+        # Define callback function for Long Strangle
+        def visualize_callback_strangle():
+            logger.info("Visualize callback triggered for Long Strangle")
+            edited = st.session_state.get("strangle_editor", {})
+            logger.info(f"Edited state: {edited}")
+            edited_rows = edited.get('edited_rows', {})
+            for idx in edited_rows:
+                if isinstance(idx, int) and 0 <= idx < len(edited_df):
+                    row = edited_df.iloc[idx]
+                    visualize_state = edited_rows[idx].get('Visualize', False)
+                    if visualize_state:
+                        logger.info(f"Visualizing row {idx}: {row}")
+                        result = row.to_dict()
+                        result["strikes"] = [float(s) for s in row['Strikes'].split('-')]
+                        result["num_contracts"] = st.session_state.num_contracts
+                        result["raw_net"] = float(result["net_cost"])
+                        result["net_cost"] = float(result["net_cost"])
+                        put_opt = next((opt for opt in puts if opt["strike"] == result["strikes"][0]), None)
+                        call_opt = next((opt for opt in calls if opt["strike"] == result["strikes"][1]), None)
+                        logger.info(f"Options found: put={put_opt}, call={call_opt}")
+                        if result and put_opt and call_opt:
+                            utils.visualize_volatility_3d(
+                                result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
+                                "Strangle", options=[put_opt, call_opt], option_actions=["buy", "buy"]
+                            )
+                            logger.info("3D plot triggered successfully for Long Strangle")
+                        else:
+                            logger.warning("Options not found for this combination")
+                            st.warning("Selección inválida o datos de opciones no disponibles.")
+                        # Reset the checkbox via separate state
+                        st.session_state["visualize_flags_strangle"][idx] = False
+                        st.rerun()
+
+        # Sync visualize flags to DataFrame
+        for idx in range(len(edited_df)):
+            edited_df.at[idx, 'Visualize'] = st.session_state["visualize_flags_strangle"][idx]
+
+        # Use data_editor with checkbox column
+        edited_df = st.data_editor(
+            edited_df,
+            column_config={
+                "Visualize": st.column_config.CheckboxColumn(
+                    "Visualize 3D",
+                    help="Check to generate 3D plot",
+                    disabled=False
+                )
+            },
+            key="strangle_editor",
+            on_change=visualize_callback_strangle,
+            width='stretch'
+        )
+        # Update flags after edit
+        for idx in range(len(edited_df)):
+            st.session_state["visualize_flags_strangle"][idx] = edited_df.at[idx, 'Visualize']
+        logger.info(f"Initial editor state for Strangle: {st.session_state.get('strangle_editor', {})}")
+        logger.info(f"Edited DataFrame for Strangle: {edited_df.head().to_dict()}")
+    else:
+        st.warning("No hay datos disponibles para Long Strangle. Verifique si hay puts con strikes inferiores a calls en el rango seleccionado.")
+        logger.warning("No data for Long Strangle. Filtered puts: {len(puts)}, calls: {len(calls)}")
