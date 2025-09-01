@@ -62,9 +62,13 @@ with tab1:
                 if isinstance(idx, int) and 0 <= idx < len(edited_df):
                     row = edited_df.iloc[idx]
                     visualize_state = edited_rows[idx].get('Visualize', False)
-                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}")
+                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}, Columns: {edited_df.columns.tolist()}")
                     if visualize_state:
                         logger.info(f"Visualizing row {idx}: {row}")
+                        if "Net Cost" not in row:
+                            logger.error(f"Missing 'Net Cost' column for row {idx}")
+                            st.error(f"Data mismatch: 'Net Cost' not found in row {idx}")
+                            continue
                         result = {
                             "net_cost": float(row["Net Cost"].replace(",", ".")),
                             "max_profit": float(row["Max Profit"].replace(",", ".")),
@@ -105,7 +109,7 @@ with tab1:
                     disabled=False
                 )
             },
-            key="bull_call_spread_editor",
+            key="bull_call_spread_editor_unique",  # Unique key to avoid conflict
             on_change=visualize_callback_call,
             width='stretch'
         )
@@ -171,9 +175,13 @@ with tab2:
                 if isinstance(idx, int) and 0 <= idx < len(edited_df):
                     row = edited_df.iloc[idx]
                     visualize_state = edited_rows[idx].get('Visualize', False)
-                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}")
+                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}, Columns: {edited_df.columns.tolist()}")
                     if visualize_state:
                         logger.info(f"Visualizing row {idx}: {row}")
+                        if "Net Credit" not in row:
+                            logger.error(f"Missing 'Net Credit' column for row {idx}")
+                            st.error(f"Data mismatch: 'Net Credit' not found in row {idx}")
+                            continue
                         result = {
                             "net_cost": -float(row["Net Credit"].replace(",", ".")),
                             "max_profit": float(row["Max Profit"].replace(",", ".")),
@@ -214,7 +222,7 @@ with tab2:
                     disabled=False
                 )
             },
-            key="bull_put_spread_editor",
+            key="bull_put_spread_editor_unique",  # Unique key to avoid conflict
             on_change=visualize_callback_put,
             width='stretch'
         )
