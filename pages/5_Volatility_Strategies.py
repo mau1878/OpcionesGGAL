@@ -17,7 +17,13 @@ with tab1:
     st.subheader("Long Straddle")
     df = utils.create_volatility_table(calls, puts, utils.calculate_straddle, st.session_state.num_contracts, st.session_state.commission_rate)
     if not df.empty:
-        styled_df = df.style.format({"net_cost": "{:.2f}", "max_loss": "{:.2f}", "lower_breakeven": "{:.2f}", "upper_breakeven": "{:.2f}"})
+        styled_df = df.style.format({
+            "net_cost": "{:.2f}",
+            "max_loss": "{:.2f}",
+            "lower_breakeven": "{:.2f}",
+            "upper_breakeven": "{:.2f}",
+            "Cost-to-Profit Ratio": "{:.2%}"
+        })
         st.dataframe(styled_df)
     else:
         st.dataframe(df)
@@ -45,7 +51,13 @@ with tab2:
     st.subheader("Long Strangle")
     df = utils.create_volatility_table(puts, calls, utils.calculate_strangle, st.session_state.num_contracts, st.session_state.commission_rate)
     if not df.empty:
-        styled_df = df.style.format({"net_cost": "{:.2f}", "max_loss": "{:.2f}", "lower_breakeven": "{:.2f}", "upper_breakeven": "{:.2f}"})
+        styled_df = df.style.format({
+            "net_cost": "{:.2f}",
+            "max_loss": "{:.2f}",
+            "lower_breakeven": "{:.2f}",
+            "upper_breakeven": "{:.2f}",
+            "Cost-to-Profit Ratio": "{:.2%}"
+        })
         st.dataframe(styled_df)
     else:
         st.dataframe(df)

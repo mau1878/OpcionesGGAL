@@ -17,7 +17,14 @@ with tab1:
     st.subheader("Call Butterfly")
     df = utils.create_neutral_table(calls, utils.calculate_call_butterfly, st.session_state.num_contracts, st.session_state.commission_rate, 3)
     if not df.empty:
-        styled_df = df.style.format({"net_cost": "{:.2f}", "max_profit": "{:.2f}", "max_loss": "{:.2f}", "lower_breakeven": "{:.2f}", "upper_breakeven": "{:.2f}"})
+        styled_df = df.style.format({
+            "net_cost": "{:.2f}",
+            "max_profit": "{:.2f}",
+            "max_loss": "{:.2f}",
+            "lower_breakeven": "{:.2f}",
+            "upper_breakeven": "{:.2f}",
+            "Cost-to-Profit Ratio": "{:.2%}"
+        })
         st.dataframe(styled_df)
     else:
         st.dataframe(df)
@@ -47,7 +54,14 @@ with tab2:
     st.subheader("Put Butterfly")
     df = utils.create_neutral_table(puts, utils.calculate_put_butterfly, st.session_state.num_contracts, st.session_state.commission_rate, 3)
     if not df.empty:
-        styled_df = df.style.format({"net_cost": "{:.2f}", "max_profit": "{:.2f}", "max_loss": "{:.2f}", "lower_breakeven": "{:.2f}", "upper_breakeven": "{:.2f}"})
+        styled_df = df.style.format({
+            "net_cost": "{:.2f}",
+            "max_profit": "{:.2f}",
+            "max_loss": "{:.2f}",
+            "lower_breakeven": "{:.2f}",
+            "upper_breakeven": "{:.2f}",
+            "Cost-to-Profit Ratio": "{:.2%}"
+        })
         st.dataframe(styled_df)
     else:
         st.dataframe(df)
@@ -77,7 +91,14 @@ with tab3:
     st.subheader("Call Condor")
     df = utils.create_neutral_table(calls, utils.calculate_call_condor, st.session_state.num_contracts, st.session_state.commission_rate, 4)
     if not df.empty:
-        styled_df = df.style.format({"net_cost": "{:.2f}", "max_profit": "{:.2f}", "max_loss": "{:.2f}", "lower_breakeven": "{:.2f}", "upper_breakeven": "{:.2f}"})
+        styled_df = df.style.format({
+            "net_cost": "{:.2f}",
+            "max_profit": "{:.2f}",
+            "max_loss": "{:.2f}",
+            "lower_breakeven": "{:.2f}",
+            "upper_breakeven": "{:.2f}",
+            "Cost-to-Profit Ratio": "{:.2%}"
+        })
         st.dataframe(styled_df)
     else:
         st.dataframe(df)
@@ -109,7 +130,14 @@ with tab4:
     st.subheader("Put Condor")
     df = utils.create_neutral_table(puts, utils.calculate_put_condor, st.session_state.num_contracts, st.session_state.commission_rate, 4)
     if not df.empty:
-        styled_df = df.style.format({"net_cost": "{:.2f}", "max_profit": "{:.2f}", "max_loss": "{:.2f}", "lower_breakeven": "{:.2f}", "upper_breakeven": "{:.2f}"})
+        styled_df = df.style.format({
+            "net_cost": "{:.2f}",
+            "max_profit": "{:.2f}",
+            "max_loss": "{:.2f}",
+            "lower_breakeven": "{:.2f}",
+            "upper_breakeven": "{:.2f}",
+            "Cost-to-Profit Ratio": "{:.2%}"
+        })
         st.dataframe(styled_df)
     else:
         st.dataframe(df)

@@ -636,7 +636,8 @@ def create_neutral_table(options, calc_func, num_contracts, commission_rate, num
                     "max_profit": result["max_profit"],
                     "max_loss": result["max_loss"],
                     "lower_breakeven": result["lower_breakeven"],
-                    "upper_breakeven": result["upper_breakeven"]
+                    "upper_breakeven": result["upper_breakeven"],
+                    "Cost-to-Profit Ratio": result["max_loss"] / result["max_profit"] if result["max_profit"] > 0 else float('inf')
                 }
                 data.append((tuple(c["strike"] for c in combo), row))
     df = pd.DataFrame.from_dict(dict(data), orient='index') if data else pd.DataFrame()
@@ -651,7 +652,8 @@ def create_volatility_table(leg1_options, leg2_options, calc_func, num_contracts
                 "net_cost": result["net_cost"],
                 "max_loss": result["max_loss"],
                 "lower_breakeven": result["lower_breakeven"],
-                "upper_breakeven": result["upper_breakeven"]
+                "upper_breakeven": result["upper_breakeven"],
+                "Cost-to-Profit Ratio": result["max_loss"] / result["max_profit"] if result["max_profit"] > 0 else float('inf')
             }
             strikes = (opt1["strike"], opt2["strike"]) if opt1["strike"] != opt2["strike"] else opt1["strike"]
             data.append((strikes, row))
