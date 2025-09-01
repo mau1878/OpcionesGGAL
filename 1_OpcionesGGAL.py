@@ -54,7 +54,7 @@ st.sidebar.caption("Las tarifas son estimaciones; las reales pueden variar.")
 st.session_state.iv = utils.DEFAULT_IV  # 0.30
 strike_percentage = st.sidebar.slider("Rango de Strikes (% del precio actual)", 0.0, 100.0, 20.0) / 100
 st.session_state.plot_range_pct = st.sidebar.slider("Rango de Precios en Gráficos 3D (% del precio actual)", 10.0, 200.0, 50.0) / 100
-st.session_state.risk_free_rate = st.sidebar.number_input("Tasa Libre de Riesgo (%)", min_value=0.0, value=10.0, step=1.0) / 100
+st.session_state.risk_free_rate = st.sidebar.number_input("Tasa Libre de Riesgo (%)", min_value=0.0, value=35.0, step=1.0) / 100
 
 # Debug plot range
 st.session_state.debug_plot_range = {
