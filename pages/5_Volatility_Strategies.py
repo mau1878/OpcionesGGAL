@@ -69,17 +69,15 @@ with tab1:
                     if visualize_state:
                         logger.info(f"Visualizing row {idx}: {row}")
                         result = row.to_dict()
-                        # Use original DataFrame index value as strike for Straddle, handle MultiIndex
-                        strike = df.index[idx]
-                        logger.info(f"Extracted raw strike for idx {idx}: {strike}, type: {type(strike)}")
-                        if isinstance(strike, tuple):
-                            strike = strike[0]  # Take the first element of the MultiIndex tuple
-                        logger.info(f"Processed strike for idx {idx}: {strike}")
-                        result["strikes"] = [float(strike)] if pd.notna(strike) else []
-                        if not result["strikes"]:
+                        # Use Strikes column to derive the Straddle strike (take the higher strike)
+                        strikes = [float(s) for s in row['Strikes'].split('-')] if pd.notna(row['Strikes']) else []
+                        strike = max(strikes) if strikes and len(strikes) == 2 else (strikes[0] if strikes else None)
+                        logger.info(f"Extracted strike for idx {idx}: {strike}")
+                        if strike is None or not pd.notna(strike):
                             logger.error(f"Invalid strike value: {strike}")
                             st.error(f"Invalid strike value: {strike}")
                             continue
+                        result["strikes"] = [float(strike)]
                         logger.info(f"Validating strike: {strike}")
                         if strike not in call_strikes or strike not in put_strikes:
                             logger.warning(f"Strike {strike} not found in calls or puts")
