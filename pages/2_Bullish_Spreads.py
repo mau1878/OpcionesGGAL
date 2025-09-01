@@ -39,6 +39,12 @@ with tab1:
             edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}")
         edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: f"{x:.2%}")
 
+        # Convert MultiIndex to a simple index
+        if isinstance(edited_df.index, pd.MultiIndex):
+            edited_df = edited_df.reset_index()
+            edited_df['Strikes'] = edited_df['index'].apply(lambda x: f"{x[0]}-{x[1]}")
+            edited_df = edited_df.drop(columns=['index'])
+
         # Add a visualization column
         edited_df['Visualize'] = False
 
@@ -52,12 +58,12 @@ with tab1:
                         "max_profit": float(row["Max Profit"].replace(",", ".")),
                         "max_loss": float(row["Max Loss"].replace(",", ".")),
                         "breakeven": float(row["Breakeven"].replace(",", ".")),
-                        "strikes": list(idx),  # Use index as strikes
+                        "strikes": row['Strikes'].split('-'),  # Reconstruct strikes from the new column
                         "num_contracts": st.session_state.num_contracts,
                         "raw_net": float(row["Net Cost"].replace(",", "."))
                     }
-                    long_opt = next((opt for opt in calls if opt["strike"] == idx[0]), None)
-                    short_opt = next((opt for opt in calls if opt["strike"] == idx[1]), None)
+                    long_opt = next((opt for opt in calls if opt["strike"] == float(result["strikes"][0])), None)
+                    short_opt = next((opt for opt in calls if opt["strike"] == float(result["strikes"][1])), None)
                     if long_opt and short_opt:
                         utils.visualize_bullish_3d(
                             result, st.session_state.current_price, st.session_state.expiration_days,
@@ -82,7 +88,7 @@ with tab1:
             },
             key="bull_call_spread_editor",
             on_change=visualize_callback,
-            use_container_width=True
+            width='stretch'  # Replaced use_container_width=True
         )
     else:
         st.warning("No hay datos disponibles para Bull Call Spread. Asegúrese de que hay suficientes opciones call en el rango seleccionado o intente actualizar los datos.")
@@ -123,6 +129,12 @@ with tab2:
             edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}")
         edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: f"{x:.2%}")
 
+        # Convert MultiIndex to a simple index
+        if isinstance(edited_df.index, pd.MultiIndex):
+            edited_df = edited_df.reset_index()
+            edited_df['Strikes'] = edited_df['index'].apply(lambda x: f"{x[0]}-{x[1]}")
+            edited_df = edited_df.drop(columns=['index'])
+
         # Add a visualization column
         edited_df['Visualize'] = False
 
@@ -136,12 +148,12 @@ with tab2:
                         "max_profit": float(row["Max Profit"].replace(",", ".")),
                         "max_loss": float(row["Max Loss"].replace(",", ".")),
                         "breakeven": float(row["Breakeven"].replace(",", ".")),
-                        "strikes": list(idx),
+                        "strikes": row['Strikes'].split('-'),  # Reconstruct strikes from the new column
                         "num_contracts": st.session_state.num_contracts,
                         "raw_net": -float(row["Net Credit"].replace(",", "."))
                     }
-                    short_opt = next((opt for opt in puts if opt["strike"] == idx[1]), None)
-                    long_opt = next((opt for opt in puts if opt["strike"] == idx[0]), None)
+                    short_opt = next((opt for opt in puts if opt["strike"] == float(result["strikes"][1])), None)
+                    long_opt = next((opt for opt in puts if opt["strike"] == float(result["strikes"][0])), None)
                     if short_opt and long_opt:
                         utils.visualize_bullish_3d(
                             result, st.session_state.current_price, st.session_state.expiration_days,
@@ -166,7 +178,7 @@ with tab2:
             },
             key="bull_put_spread_editor",
             on_change=visualize_callback_put,
-            use_container_width=True
+            width='stretch'  # Replaced use_container_width=True
         )
     else:
         st.warning("No hay datos disponibles para Bull Put Spread. Asegúrese de que hay suficientes opciones put en el rango seleccionado o intente actualizar los datos.")
