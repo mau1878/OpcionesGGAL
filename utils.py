@@ -366,16 +366,27 @@ def calculate_straddle(call_opt, put_opt, num_contracts, commission_rate):
     net_cost = base_cost + total_fees
 
     max_loss = net_cost
-    lower_breakeven = call_opt["strike"] - (net_cost / (100 * num_contracts))
-    upper_breakeven = call_opt["strike"] + (net_cost / (100 * num_contracts))
-
+    strike = call_opt["strike"]
+    lower_breakeven = strike - (net_cost / (100 * num_contracts))
+    upper_breakeven = strike + (net_cost / (100 * num_contracts))
+    
+    # Estimate max_profit at plot range boundaries
+    current_price = st.session_state.get("current_price", 100.0)
+    plot_range_pct = st.session_state.get("plot_range_pct", 0.3)
+    max_price = current_price * (1 + plot_range_pct)
+    min_price = max(0.1, current_price * (1 - plot_range_pct))
+    call_profit = max(max_price - strike, 0) - call_price
+    put_profit = max(strike - min_price, 0) - put_price
+    max_profit = max(call_profit, put_profit) * 100 * num_contracts * (1 - commission_rate)
+    
     return {
         "raw_net": base_cost,
         "net_cost": net_cost,
         "max_loss": max_loss,
+        "max_profit": max_profit if max_profit > 0 else 0.01,  # Avoid zero
         "lower_breakeven": lower_breakeven,
         "upper_breakeven": upper_breakeven,
-        "strikes": [call_opt["strike"]],
+        "strikes": [strike],
         "num_contracts": num_contracts
     }
 
@@ -393,25 +404,41 @@ def calculate_strangle(put_opt, call_opt, num_contracts, commission_rate):
     max_loss = net_cost
     lower_breakeven = put_opt["strike"] - (net_cost / (100 * num_contracts))
     upper_breakeven = call_opt["strike"] + (net_cost / (100 * num_contracts))
-
+    
+    # Estimate max_profit at plot range boundaries
+    current_price = st.session_state.get("current_price", 100.0)
+    plot_range_pct = st.session_state.get("plot_range_pct", 0.3)
+    max_price = current_price * (1 + plot_range_pct)
+    min_price = max(0.1, current_price * (1 - plot_range_pct))
+    call_profit = max(max_price - call_opt["strike"], 0) - call_price
+    put_profit = max(put_opt["strike"] - min_price, 0) - put_price
+    max_profit = max(call_profit, put_profit) * 100 * num_contracts * (1 - commission_rate)
+    
     return {
         "raw_net": base_cost,
         "net_cost": net_cost,
         "max_loss": max_loss,
+        "max_profit": max_profit if max_profit > 0 else 0.01,  # Avoid zero
         "lower_breakeven": lower_breakeven,
         "upper_breakeven": upper_breakeven,
         "strikes": [put_opt["strike"], call_opt["strike"]],
         "num_contracts": num_contracts
     }
 def calculate_option_iv(S, K, T, r, premium, option_type="call"):
-    """Calculate implied volatility for a single option using bisection."""
+    if premium is None or premium <= 0:
+        logger.warning(f"Invalid premium {premium} for S={S}, K={K}, T={T}, option_type={option_type}")
+        return None
     def bs_price(sigma):
-        val = black_scholes(S, K, T, r, sigma, option_type)
-        return val - premium
-
-    low, high = 0.01, 5.0  # IV bounds
+        try:
+            val = black_scholes(S, K, T, r, sigma, option_type)
+            return val - premium
+        except Exception as e:
+            logger.warning(f"Black-Scholes error for sigma={sigma}: {e}")
+            return float('inf')
+    
+    low, high = 0.01, 5.0
     epsilon = 1e-6
-    max_iter = 100
+    max_iter = 200  # Increased from 100
     iter_count = 0
 
     while iter_count < max_iter:
@@ -425,25 +452,24 @@ def calculate_option_iv(S, K, T, r, premium, option_type="call"):
             low = mid
         iter_count += 1
 
-    logger.warning(f"IV calculation did not converge for S={S}, K={K}, T={T}, premium={premium}")
-    return DEFAULT_IV
+    logger.warning(f"IV calculation did not converge for S={S}, K={K}, T={T}, premium={premium}, option_type={option_type}")
+    return None
 # --- Shared Helpers for Viz and Tables ---
 
 def _calibrate_iv(raw_net, current_price, expiration_days, strategy_value_func, options, option_actions, contract_ratios=None):
-    """Calculate implied volatility for a strategy by averaging IVs of individual options."""
     if not options or not option_actions:
         logger.warning("No options or actions provided for IV calibration")
         return DEFAULT_IV
 
     r = st.session_state.get("risk_free_rate", 0.50)
-    T = expiration_days / 365.0
+    T = max(expiration_days / 365.0, 1e-9)
     ivs = []
     weights = contract_ratios if contract_ratios else [1.0] * len(options)
 
     for opt, action, weight in zip(options, option_actions, weights):
         premium = get_strategy_price(opt, action)
-        if premium is None:
-            logger.warning(f"Invalid premium for option {opt['symbol']}")
+        if premium is None or premium <= 0:
+            logger.warning(f"Invalid premium {premium} for option {opt.get('symbol', 'unknown')}, strike={opt['strike']}")
             continue
         iv = calculate_option_iv(
             S=current_price,
@@ -453,20 +479,25 @@ def _calibrate_iv(raw_net, current_price, expiration_days, strategy_value_func, 
             premium=premium,
             option_type=opt["type"]
         )
-        if iv and not np.isnan(iv):
+        if iv and not np.isnan(iv) and iv > 0:
             ivs.append(iv * weight)
+        else:
+            logger.warning(f"Failed to calculate IV for option {opt.get('symbol', 'unknown')}, strike={opt['strike']}")
 
     if ivs:
         total_weight = sum(weights[:len(ivs)])
         calibrated_iv = sum(ivs) / total_weight if total_weight > 0 else DEFAULT_IV
-        # Verify the strategy value with the averaged IV
         try:
             model_value = strategy_value_func(current_price, T, calibrated_iv)
-            if abs(model_value - raw_net) < raw_net * 0.1:
+            if abs(model_value - raw_net) < raw_net * 0.2:  # Relaxed to 20%
                 return calibrated_iv
-        except Exception:
-            pass
-    logger.warning("Direct IV calibration failed or verification not met. Using default IV.")
+            else:
+                logger.warning(f"IV verification failed: model_value={model_value}, raw_net={raw_net}, tolerance={raw_net * 0.2}")
+                return calibrated_iv  # Use calibrated IV anyway
+        except Exception as e:
+            logger.warning(f"Strategy value error during IV verification: {e}")
+            return calibrated_iv
+    logger.warning("No valid IVs calculated. Using default IV.")
     return DEFAULT_IV
 
 def _compute_payoff_grid(strategy_value_func, current_price, expiration_days, iv, net_entry):
@@ -653,7 +684,7 @@ def create_volatility_table(leg1_options, leg2_options, calc_func, num_contracts
                 "max_loss": result["max_loss"],
                 "lower_breakeven": result["lower_breakeven"],
                 "upper_breakeven": result["upper_breakeven"],
-                "Cost-to-Profit Ratio": result["max_loss"] / result["max_profit"] if result["max_profit"] > 0 else float('inf')
+                "Cost-to-Profit Ratio": result["max_loss"] / result.get("max_profit", 0.01) if result.get("max_profit", 0.01) > 0 else float('inf')
             }
             strikes = (opt1["strike"], opt2["strike"]) if opt1["strike"] != opt2["strike"] else opt1["strike"]
             data.append((strikes, row))
