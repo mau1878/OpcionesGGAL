@@ -52,6 +52,12 @@ with tab1:
         # Add a visualization column
         edited_df['Visualize'] = False
 
+        # Store DataFrame in session state
+        if "bull_call_df" not in st.session_state:
+            st.session_state["bull_call_df"] = edited_df.copy()
+        else:
+            st.session_state["bull_call_df"] = edited_df
+
         # Initialize separate state for visualize flags
         if "visualize_flags_call" not in st.session_state:
             st.session_state["visualize_flags_call"] = [False] * len(edited_df)
@@ -62,11 +68,15 @@ with tab1:
             edited = st.session_state.get("bull_call_spread_editor_unique", {})
             logger.info(f"Edited state: {edited}")
             edited_rows = edited.get('edited_rows', {})
+            logger.info(f"Edited rows: {edited_rows}")
+            # Use stored DataFrame
+            edited_df_local = st.session_state["bull_call_df"]
+            logger.info(f"Using DataFrame with id: {id(edited_df_local)}, Columns: {edited_df_local.columns.tolist()}")
             for idx in edited_rows:
-                if isinstance(idx, int) and 0 <= idx < len(edited_df):
-                    row = edited_df.iloc[idx]
+                if isinstance(idx, int) and 0 <= idx < len(edited_df_local):
+                    row = edited_df_local.iloc[idx]
                     visualize_state = edited_rows[idx].get('Visualize', False)
-                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}, Columns: {edited_df.columns.tolist()}")
+                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}")
                     if visualize_state:
                         logger.info(f"Visualizing row {idx}: {row}")
                         if "Net Cost" not in row:
@@ -178,6 +188,12 @@ with tab2:
         # Add a visualization column
         edited_df['Visualize'] = False
 
+        # Store DataFrame in session state
+        if "bull_put_df" not in st.session_state:
+            st.session_state["bull_put_df"] = edited_df.copy()
+        else:
+            st.session_state["bull_put_df"] = edited_df
+
         # Initialize separate state for visualize flags
         if "visualize_flags_put" not in st.session_state:
             st.session_state["visualize_flags_put"] = [False] * len(edited_df)
@@ -188,11 +204,15 @@ with tab2:
             edited = st.session_state.get("bull_put_spread_editor_unique", {})
             logger.info(f"Edited state: {edited}")
             edited_rows = edited.get('edited_rows', {})
+            logger.info(f"Edited rows: {edited_rows}")
+            # Use stored DataFrame
+            edited_df_local = st.session_state["bull_put_df"]
+            logger.info(f"Using DataFrame with id: {id(edited_df_local)}, Columns: {edited_df_local.columns.tolist()}")
             for idx in edited_rows:
-                if isinstance(idx, int) and 0 <= idx < len(edited_df):
-                    row = edited_df.iloc[idx]
+                if isinstance(idx, int) and 0 <= idx < len(edited_df_local):
+                    row = edited_df_local.iloc[idx]
                     visualize_state = edited_rows[idx].get('Visualize', False)
-                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}, Columns: {edited_df.columns.tolist()}")
+                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}")
                     if visualize_state:
                         logger.info(f"Visualizing row {idx}: {row}")
                         if "Net Credit" not in row:
@@ -225,7 +245,7 @@ with tab2:
                         else:
                             logger.warning("Options not found for this Put Spread combination")
                             st.warning("Datos de opciones no disponibles para esta combinación.")
-                        # Reset via separate state
+                        # Reset the checkbox via separate state
                         st.session_state["visualize_flags_put"][idx] = False
                         st.experimental_rerun()
 
