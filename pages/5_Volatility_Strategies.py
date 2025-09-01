@@ -67,11 +67,11 @@ with tab1:
                     if visualize_state:
                         logger.info(f"Visualizing row {idx}: {row}")
                         result = row.to_dict()
-                        # Use row.name (strike value) for Straddle
-                        result["strikes"] = [float(row.name)] if pd.notna(row.name) else []
+                        # Use DataFrame index value as strike for Straddle
+                        result["strikes"] = [float(edited_df.index[idx])] if pd.notna(edited_df.index[idx]) else []
                         if not result["strikes"]:
-                            logger.error(f"Invalid strike value: {row.name}")
-                            st.error(f"Invalid strike value: {row.name}")
+                            logger.error(f"Invalid strike value: {edited_df.index[idx]}")
+                            st.error(f"Invalid strike value: {edited_df.index[idx]}")
                             continue
                         strike = result["strikes"][0]
                         logger.info(f"Validating strike: {strike}")
@@ -82,7 +82,7 @@ with tab1:
                         result["num_contracts"] = st.session_state.num_contracts
                         result["raw_net"] = float(result["net_cost"])
                         result["net_cost"] = float(result["net_cost"])
-                        call_opt = next((opt for opt in calls if abs(opt["strike"] - strike) < 0.01), None)  # Allow small float precision
+                        call_opt = next((opt for opt in calls if abs(opt["strike"] - strike) < 0.01), None)
                         put_opt = next((opt for opt in puts if abs(opt["strike"] - strike) < 0.01), None)
                         logger.info(f"Options found: call={call_opt}, put={put_opt}")
                         if result and call_opt and put_opt:
