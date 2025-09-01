@@ -694,8 +694,24 @@ def create_volatility_table(leg1_options, leg2_options, calc_func, num_contracts
 def create_spread_matrix(options, calc_func, num_contracts, commission_rate, is_debit=True):
     options_sorted = sorted(options, key=lambda o: o["strike"])
     strikes = [o["strike"] for o in options_sorted]
-    profit_df = pd.DataFrame(index=strikes, columns=strikes)
-    return profit_df, None, None, None  # Placeholder for full impl
+    profit_df = pd.DataFrame(index=strikes, columns=strikes, dtype=float)
+    
+    for i in range(len(strikes)):
+        for j in range(len(strikes)):
+            if i == j:
+                continue
+            opt1 = options_sorted[i]
+            opt2 = options_sorted[j]
+            result = calc_func(opt1, opt2, num_contracts, commission_rate)
+            if result is not None:
+                if is_debit:
+                    val = result["net_cost"]
+                else:
+                    val = -result["net_cost"]  # Make credit positive
+                profit_df.at[opt1["strike"], opt2["strike"]] = val
+    
+    # Placeholder for additional matrices (max_profit, etc.) if needed in the future
+    return profit_df, None, None, None
 
 # --- Split 3D Visualization Functions ---
 

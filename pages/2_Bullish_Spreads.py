@@ -17,14 +17,34 @@ tab1, tab2 = st.tabs(["Bull Call Spread", "Bull Put Spread"])
 with tab1:
     st.header("Bull Call Spread (Débito)")
     st.subheader("Análisis Detallado por Ratio")
-    detailed_df_call = utils.create_bullish_spread_table(calls, utils.calculate_bull_call_spread, st.session_state.num_contracts, st.session_state.commission_rate, is_debit=True)
     if not detailed_df_call.empty:
-        st.dataframe(detailed_df_call.style.format({
-            "Net Cost": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}", "Cost-to-Profit Ratio": "{:.2%}", "Breakeven": "{:.2f}"
-        }))
+        for combo, row in detailed_df_call.iterrows():
+            with st.expander(f"Strikes: {combo} - Net Cost: {row['Net Cost']:.2f} - Max Profit: {row['Max Profit']:.2f}"):
+                st.write(row.to_frame().T.style.format({
+                    "Net Cost": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}", 
+                    "Cost-to-Profit Ratio": "{:.2%}", "Breakeven": "{:.2f}"
+                }).to_html(), unsafe_allow_html=True)
+                if st.button("Visualize 3D", key=f"viz_bcs_{combo}"):
+                    result = {
+                        "net_cost": row["Net Cost"],
+                        "max_profit": row["Max Profit"],
+                        "max_loss": row["Max Loss"],
+                        "breakeven": row["Breakeven"],
+                        "strikes": list(combo),
+                        "num_contracts": st.session_state.num_contracts,
+                        "raw_net": row["Net Cost"]
+                    }
+                    long_opt = next((opt for opt in calls if opt["strike"] == combo[0]), None)
+                    short_opt = next((opt for opt in calls if opt["strike"] == combo[1]), None)
+                    if long_opt and short_opt:
+                        utils.visualize_bullish_3d(
+                            result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
+                            "Bull Call Spread", options=[long_opt, short_opt], option_actions=["buy", "sell"]
+                        )
+                    else:
+                        st.warning("Datos de opciones no disponibles para esta combinación.")
     else:
-        st.dataframe(detailed_df_call)
-        st.warning("No hay datos disponibles para Bull Call Spread. Asegúrese de que hay suficientes opciones call.")
+        st.warning("No hay datos disponibles para Bull Call Spread.")
     st.subheader("Matriz de Costo Neto (Compra en Fila, Venta en Columna)")
     profit_df, _, _, _ = utils.create_spread_matrix(calls, utils.calculate_bull_call_spread, st.session_state.num_contracts, st.session_state.commission_rate, True)
     if not profit_df.empty:
