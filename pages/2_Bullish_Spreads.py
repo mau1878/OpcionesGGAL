@@ -52,12 +52,13 @@ with tab1:
         # Add a visualization column
         edited_df['Visualize'] = False
 
-        # Define callback function for Bull Call Spread
+        # Define callback function for Bull Call Spread with debug
         def visualize_callback_call():
             logger.info("Visualize callback triggered for Bull Call Spread")
-            edited = st.session_state.get("bull_call_spread_editor", {})
+            edited = st.session_state.get("bull_call_spread_editor_unique", {})
             logger.info(f"Edited state: {edited}")
             edited_rows = edited.get('edited_rows', {})
+            logger.info(f"Edited rows: {edited_rows}")
             for idx in edited_rows:
                 if isinstance(idx, int) and 0 <= idx < len(edited_df):
                     row = edited_df.iloc[idx]
@@ -97,7 +98,7 @@ with tab1:
                             st.warning("Datos de opciones no disponibles para esta combinación.")
                         # Reset the checkbox
                         edited_df.at[idx, 'Visualize'] = False
-                        st.session_state["bull_call_spread_editor"] = edited_df.to_dict()
+                        st.session_state["bull_call_spread_editor_unique"] = edited_df.to_dict()
 
         # Use data_editor with checkbox column
         edited_df = st.data_editor(
@@ -109,10 +110,11 @@ with tab1:
                     disabled=False
                 )
             },
-            key="bull_call_spread_editor_unique",  # Unique key to avoid conflict
+            key="bull_call_spread_editor_unique",
             on_change=visualize_callback_call,
             width='stretch'
         )
+        logger.info(f"Initial editor state for Bull Call Spread: {st.session_state.get('bull_call_spread_editor_unique', {})}")
     else:
         st.warning("No hay datos disponibles para Bull Call Spread. Asegúrese de que hay suficientes opciones call en el rango seleccionado o intente actualizar los datos.")
         logger.warning(f"No data for Bull Call Spread. Filtered calls: {len(calls)}, Strikes: {min_strike:.2f}-{max_strike:.2f}, Expiration: {st.session_state.selected_exp}")
@@ -165,12 +167,13 @@ with tab2:
         # Add a visualization column
         edited_df['Visualize'] = False
 
-        # Define callback function for Bull Put Spread
+        # Define callback function for Bull Put Spread with debug
         def visualize_callback_put():
             logger.info("Visualize callback triggered for Bull Put Spread")
-            edited = st.session_state.get("bull_put_spread_editor", {})
+            edited = st.session_state.get("bull_put_spread_editor_unique", {})
             logger.info(f"Edited state: {edited}")
             edited_rows = edited.get('edited_rows', {})
+            logger.info(f"Edited rows: {edited_rows}")
             for idx in edited_rows:
                 if isinstance(idx, int) and 0 <= idx < len(edited_df):
                     row = edited_df.iloc[idx]
@@ -210,7 +213,7 @@ with tab2:
                             st.warning("Datos de opciones no disponibles para esta combinación.")
                         # Reset the checkbox
                         edited_df.at[idx, 'Visualize'] = False
-                        st.session_state["bull_put_spread_editor"] = edited_df.to_dict()
+                        st.session_state["bull_put_spread_editor_unique"] = edited_df.to_dict()
 
         # Use data_editor with checkbox column
         edited_df = st.data_editor(
@@ -222,10 +225,11 @@ with tab2:
                     disabled=False
                 )
             },
-            key="bull_put_spread_editor_unique",  # Unique key to avoid conflict
+            key="bull_put_spread_editor_unique",
             on_change=visualize_callback_put,
             width='stretch'
         )
+        logger.info(f"Initial editor state for Bull Put Spread: {st.session_state.get('bull_put_spread_editor_unique', {})}")
     else:
         st.warning("No hay datos disponibles para Bull Put Spread. Asegúrese de que hay suficientes opciones put en el rango seleccionado o intente actualizar los datos.")
         logger.warning(f"No data for Bull Put Spread. Filtered puts: {len(puts)}, Strikes: {min_strike:.2f}-{max_strike:.2f}, Expiration: {st.session_state.selected_exp}")
