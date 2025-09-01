@@ -17,11 +17,21 @@ tab1, tab2 = st.tabs(["Bull Call Spread", "Bull Put Spread"])
 with tab1:
     st.header("Bull Call Spread (Débito)")
     st.subheader("Análisis Detallado por Ratio")
+    try:
+        detailed_df_call = utils.create_bullish_spread_table(
+            calls, utils.calculate_bull_call_spread, st.session_state.num_contracts, 
+            st.session_state.commission_rate, is_debit=True
+        )
+    except Exception as e:
+        st.error(f"Error al crear la tabla de Bull Call Spread: {e}")
+        logger.error(f"Error in create_bullish_spread_table: {e}")
+        detailed_df_call = pd.DataFrame()
+
     if not detailed_df_call.empty:
         for combo, row in detailed_df_call.iterrows():
             with st.expander(f"Strikes: {combo} - Net Cost: {row['Net Cost']:.2f} - Max Profit: {row['Max Profit']:.2f}"):
                 st.write(row.to_frame().T.style.format({
-                    "Net Cost": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}", 
+                    "Net Cost": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}",
                     "Cost-to-Profit Ratio": "{:.2%}", "Breakeven": "{:.2f}"
                 }).to_html(), unsafe_allow_html=True)
                 if st.button("Visualize 3D", key=f"viz_bcs_{combo}"):
@@ -38,74 +48,86 @@ with tab1:
                     short_opt = next((opt for opt in calls if opt["strike"] == combo[1]), None)
                     if long_opt and short_opt:
                         utils.visualize_bullish_3d(
-                            result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
-                            "Bull Call Spread", options=[long_opt, short_opt], option_actions=["buy", "sell"]
+                            result, st.session_state.current_price, st.session_state.expiration_days, 
+                            st.session_state.iv, "Bull Call Spread", 
+                            options=[long_opt, short_opt], option_actions=["buy", "sell"]
                         )
                     else:
                         st.warning("Datos de opciones no disponibles para esta combinación.")
     else:
-        st.warning("No hay datos disponibles para Bull Call Spread.")
+        st.warning("No hay datos disponibles para Bull Call Spread. Asegúrese de que hay suficientes opciones call en el rango seleccionado o intente actualizar los datos.")
+        logger.warning(f"No data for Bull Call Spread. Filtered calls: {len(calls)}, Strikes: {min_strike:.2f}-{max_strike:.2f}, Expiration: {st.session_state.selected_exp}")
+
     st.subheader("Matriz de Costo Neto (Compra en Fila, Venta en Columna)")
-    profit_df, _, _, _ = utils.create_spread_matrix(calls, utils.calculate_bull_call_spread, st.session_state.num_contracts, st.session_state.commission_rate, True)
-    if not profit_df.empty:
-        st.dataframe(profit_df.style.format("{:.2f}").background_gradient(cmap='viridis_r'))
-    else:
-        st.warning("No hay datos disponibles para la matriz de costos.")
-    st.subheader("Visualización 3D")
-    if not detailed_df_call.empty:
-        options = detailed_df_call.index
-        selected = st.selectbox("Selecciona una combinación para visualizar", options, key="bcs_select")
-        row = detailed_df_call.loc[selected]
-        result = row.to_dict()
-        result["strikes"] = list(selected) if isinstance(selected, tuple) else [selected]
-        result["num_contracts"] = st.session_state.num_contracts
-        result["raw_net"] = result["Net Cost"]  # Add for calibration
-        result["net_cost"] = result["Net Cost"]
-        # Find options corresponding to selected strikes
-        long_opt = next((opt for opt in calls if opt["strike"] == selected[0]), None)
-        short_opt = next((opt for opt in calls if opt["strike"] == selected[1]), None)
-        if result and long_opt and short_opt:
-            utils.visualize_bullish_3d(
-                result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
-                "Bull Call Spread", options=[long_opt, short_opt], option_actions=["buy", "sell"]
-            )
+    try:
+        profit_df, _, _, _ = utils.create_spread_matrix(
+            calls, utils.calculate_bull_call_spread, st.session_state.num_contracts, 
+            st.session_state.commission_rate, True
+        )
+        if not profit_df.empty:
+            st.dataframe(profit_df.style.format("{:.2f}").background_gradient(cmap='viridis_r'))
         else:
-            st.warning("Selección inválida o datos de opciones no disponibles.")
+            st.warning("No hay datos disponibles para la matriz de costos.")
+            logger.warning("Empty profit_df for Bull Call Spread matrix.")
+    except Exception as e:
+        st.error(f"Error al crear la matriz de costos: {e}")
+        logger.error(f"Error in create_spread_matrix: {e}")
 
 with tab2:
     st.header("Bull Put Spread (Crédito)")
     st.subheader("Análisis Detallado por Ratio")
-    detailed_df_put = utils.create_bullish_spread_table(puts, utils.calculate_bull_put_spread, st.session_state.num_contracts, st.session_state.commission_rate, is_debit=False)
+    try:
+        detailed_df_put = utils.create_bullish_spread_table(
+            puts, utils.calculate_bull_put_spread, st.session_state.num_contracts, 
+            st.session_state.commission_rate, is_debit=False
+        )
+    except Exception as e:
+        st.error(f"Error al crear la tabla de Bull Put Spread: {e}")
+        logger.error(f"Error in create_bullish_spread_table: {e}")
+        detailed_df_put = pd.DataFrame()
+
     if not detailed_df_put.empty:
-        st.dataframe(detailed_df_put.style.format({
-            "Net Credit": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}", "Cost-to-Profit Ratio": "{:.2%}", "Breakeven": "{:.2f}"
-        }))
+        for combo, row in detailed_df_put.iterrows():
+            with st.expander(f"Strikes: {combo} - Net Credit: {row['Net Credit']:.2f} - Max Profit: {row['Max Profit']:.2f}"):
+                st.write(row.to_frame().T.style.format({
+                    "Net Credit": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}",
+                    "Cost-to-Profit Ratio": "{:.2%}", "Breakeven": "{:.2f}"
+                }).to_html(), unsafe_allow_html=True)
+                if st.button("Visualize 3D", key=f"viz_bps_{combo}"):
+                    result = {
+                        "net_cost": -row["Net Credit"],
+                        "max_profit": row["Max Profit"],
+                        "max_loss": row["Max Loss"],
+                        "breakeven": row["Breakeven"],
+                        "strikes": list(combo),
+                        "num_contracts": st.session_state.num_contracts,
+                        "raw_net": -row["Net Credit"]
+                    }
+                    short_opt = next((opt for opt in puts if opt["strike"] == combo[1]), None)
+                    long_opt = next((opt for opt in puts if opt["strike"] == combo[0]), None)
+                    if short_opt and long_opt:
+                        utils.visualize_bullish_3d(
+                            result, st.session_state.current_price, st.session_state.expiration_days, 
+                            st.session_state.iv, "Bull Put Spread", 
+                            options=[short_opt, long_opt], option_actions=["sell", "buy"]
+                        )
+                    else:
+                        st.warning("Datos de opciones no disponibles para esta combinación.")
     else:
-        st.dataframe(detailed_df_put)
-        st.warning("No hay datos disponibles para Bull Put Spread. Asegúrese de que hay suficientes opciones put.")
+        st.warning("No hay datos disponibles para Bull Put Spread. Asegúrese de que hay suficientes opciones put en el rango seleccionado o intente actualizar los datos.")
+        logger.warning(f"No data for Bull Put Spread. Filtered puts: {len(puts)}, Strikes: {min_strike:.2f}-{max_strike:.2f}, Expiration: {st.session_state.selected_exp}")
+
     st.subheader("Matriz de Crédito Neto (Venta en Fila, Compra en Columna)")
-    profit_df, _, _, _ = utils.create_spread_matrix(puts, utils.calculate_bull_put_spread, st.session_state.num_contracts, st.session_state.commission_rate, False)
-    if not profit_df.empty:
-        st.dataframe(profit_df.style.format("{:.2f}").background_gradient(cmap='viridis'))
-    else:
-        st.warning("No hay datos disponibles para la matriz de créditos.")
-    st.subheader("Visualización 3D")
-    if not detailed_df_put.empty:
-        options = detailed_df_put.index
-        selected = st.selectbox("Selecciona una combinación para visualizar", options, key="bps_select")
-        row = detailed_df_put.loc[selected]
-        result = row.to_dict()
-        result["strikes"] = list(selected) if isinstance(selected, tuple) else [selected]
-        result["num_contracts"] = st.session_state.num_contracts
-        result["raw_net"] = -result.get("Net Credit", 0)  # Credit is negative net_cost
-        result["net_cost"] = -result.get("Net Credit", 0)
-        # Find options corresponding to selected strikes
-        short_opt = next((opt for opt in puts if opt["strike"] == selected[1]), None)
-        long_opt = next((opt for opt in puts if opt["strike"] == selected[0]), None)
-        if result and short_opt and long_opt:
-            utils.visualize_bullish_3d(
-                result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
-                "Bull Put Spread", options=[short_opt, long_opt], option_actions=["sell", "buy"]
-            )
+    try:
+        profit_df, _, _, _ = utils.create_spread_matrix(
+            puts, utils.calculate_bull_put_spread, st.session_state.num_contracts, 
+            st.session_state.commission_rate, False
+        )
+        if not profit_df.empty:
+            st.dataframe(profit_df.style.format("{:.2f}").background_gradient(cmap='viridis'))
         else:
-            st.warning("Selección inválida o datos de opciones no disponibles.")
+            st.warning("No hay datos disponibles para la matriz de créditos.")
+            logger.warning("Empty profit_df for Bull Put Spread matrix.")
+    except Exception as e:
+        st.error(f"Error al crear la matriz de créditos: {e}")
+        logger.error(f"Error in create_spread_matrix: {e}")
