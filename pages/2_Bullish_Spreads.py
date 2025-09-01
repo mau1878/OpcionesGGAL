@@ -52,9 +52,9 @@ with tab1:
         # Add a visualization column
         edited_df['Visualize'] = False
 
-        # Define callback function with detailed debugging
-        def visualize_callback():
-            logger.info("Visualize callback triggered")
+        # Define callback function for Bull Call Spread
+        def visualize_callback_call():
+            logger.info("Visualize callback triggered for Bull Call Spread")
             edited = st.session_state.get("bull_call_spread_editor", {})
             logger.info(f"Edited state: {edited}")
             edited_rows = edited.get('edited_rows', {})
@@ -84,7 +84,7 @@ with tab1:
                                     st.session_state.iv, "Bull Call Spread",
                                     options=[long_opt, short_opt], option_actions=["buy", "sell"]
                                 )
-                                logger.info("3D plot triggered successfully")
+                                logger.info("3D plot triggered successfully for Bull Call Spread")
                             except Exception as e:
                                 logger.error(f"Error in visualize_bullish_3d: {e}")
                                 st.error(f"Failed to generate 3D plot: {e}")
@@ -106,7 +106,7 @@ with tab1:
                 )
             },
             key="bull_call_spread_editor",
-            on_change=visualize_callback,
+            on_change=visualize_callback_call,
             width='stretch'
         )
     else:
@@ -161,9 +161,9 @@ with tab2:
         # Add a visualization column
         edited_df['Visualize'] = False
 
-        # Define callback function with detailed debugging
+        # Define callback function for Bull Put Spread
         def visualize_callback_put():
-            logger.info("Visualize callback triggered for Put Spread")
+            logger.info("Visualize callback triggered for Bull Put Spread")
             edited = st.session_state.get("bull_put_spread_editor", {})
             logger.info(f"Edited state: {edited}")
             edited_rows = edited.get('edited_rows', {})
@@ -193,7 +193,7 @@ with tab2:
                                     st.session_state.iv, "Bull Put Spread",
                                     options=[short_opt, long_opt], option_actions=["sell", "buy"]
                                 )
-                                logger.info("3D plot triggered successfully for Put Spread")
+                                logger.info("3D plot triggered successfully for Bull Put Spread")
                             except Exception as e:
                                 logger.error(f"Error in visualize_bullish_3d for Put Spread: {e}")
                                 st.error(f"Failed to generate 3D plot for Put Spread: {e}")
