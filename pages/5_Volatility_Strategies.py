@@ -39,11 +39,15 @@ with tab1:
             edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}")
         edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: x)  # Raw number
 
-        # Convert MultiIndex to a simple index (Straddle typically has a single strike, so no need for multi-level)
+        # Preserve the original index as strike, only reset if MultiIndex and extract strike
         if isinstance(edited_df.index, pd.MultiIndex):
             edited_df = edited_df.reset_index()
-            # For Straddle, the index is the strike, no need to create a Strikes column
-            edited_df = edited_df.rename(columns={'level_0': 'Strike'}) if 'level_0' in edited_df.columns else edited_df
+            edited_df = edited_df.rename(columns={'level_0': 'Strike'})
+            # Set the first level of MultiIndex as the index if it represents the strike
+            edited_df.set_index('Strike', inplace=True)
+        else:
+            # Ensure the index remains the strike value
+            pass  # No reset needed if already a single strike index
 
         # Add a visualization column
         edited_df['Visualize'] = False
@@ -67,11 +71,12 @@ with tab1:
                     if visualize_state:
                         logger.info(f"Visualizing row {idx}: {row}")
                         result = row.to_dict()
-                        # Use DataFrame index value as strike for Straddle
-                        result["strikes"] = [float(edited_df.index[idx])] if pd.notna(edited_df.index[idx]) else []
+                        # Use original DataFrame index value as strike for Straddle
+                        original_strike = df.index[idx] if pd.notna(df.index[idx]) else None
+                        result["strikes"] = [float(original_strike)] if original_strike is not None else []
                         if not result["strikes"]:
-                            logger.error(f"Invalid strike value: {edited_df.index[idx]}")
-                            st.error(f"Invalid strike value: {edited_df.index[idx]}")
+                            logger.error(f"Invalid strike value: {original_strike}")
+                            st.error(f"Invalid strike value: {original_strike}")
                             continue
                         strike = result["strikes"][0]
                         logger.info(f"Validating strike: {strike}")
