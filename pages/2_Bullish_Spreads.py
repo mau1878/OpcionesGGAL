@@ -37,7 +37,7 @@ with tab1:
         edited_df = detailed_df_call.copy()
         for col in ["Net Cost", "Max Profit", "Max Loss", "Breakeven"]:
             edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}")
-        edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: x)  # Raw number instead of percentage
+        edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: x)  # Raw number
 
         # Convert MultiIndex to a simple index
         if isinstance(edited_df.index, pd.MultiIndex):
@@ -52,48 +52,48 @@ with tab1:
         # Add a visualization column
         edited_df['Visualize'] = False
 
-        # Define callback function with debugging
+        # Define callback function with detailed debugging
         def visualize_callback():
             logger.info("Visualize callback triggered")
             edited = st.session_state.get("bull_call_spread_editor", {})
             logger.info(f"Edited state: {edited}")
-            for idx, row in edited_df.iterrows():
-                if edited.get(str(idx), {}).get('Visualize', False):
-                    logger.info(f"Visualizing row {idx}: {row}")
-                    result = {
-                        "net_cost": float(row["Net Cost"].replace(",", ".")),
-                        "max_profit": float(row["Max Profit"].replace(",", ".")),
-                        "max_loss": float(row["Max Loss"].replace(",", ".")),
-                        "breakeven": float(row["Breakeven"].replace(",", ".")),
-                        "strikes": [float(s) for s in row['Strikes'].split('-')],  # Reconstruct strikes
-                        "num_contracts": st.session_state.num_contracts,
-                        "raw_net": float(row["Net Cost"].replace(",", "."))
-                    }
-                    long_opt = next((opt for opt in calls if opt["strike"] == result["strikes"][0]), None)
-                    short_opt = next((opt for opt in calls if opt["strike"] == result["strikes"][1]), None)
-                    if long_opt and short_opt:
+            edited_rows = edited.get('edited_rows', {})
+            for idx in edited_rows:
+                if isinstance(idx, int) and 0 <= idx < len(edited_df):
+                    row = edited_df.iloc[idx]
+                    visualize_state = edited_rows[idx].get('Visualize', False)
+                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}")
+                    if visualize_state:
+                        logger.info(f"Visualizing row {idx}: {row}")
+                        result = {
+                            "net_cost": float(row["Net Cost"].replace(",", ".")),
+                            "max_profit": float(row["Max Profit"].replace(",", ".")),
+                            "max_loss": float(row["Max Loss"].replace(",", ".")),
+                            "breakeven": float(row["Breakeven"].replace(",", ".")),
+                            "strikes": [float(s) for s in row['Strikes'].split('-')],
+                            "num_contracts": st.session_state.num_contracts,
+                            "raw_net": float(row["Net Cost"].replace(",", "."))
+                        }
+                        long_opt = next((opt for opt in calls if opt["strike"] == result["strikes"][0]), None)
+                        short_opt = next((opt for opt in calls if opt["strike"] == result["strikes"][1]), None)
                         logger.info(f"Options found: long={long_opt}, short={short_opt}")
-                        try:
-                            fig = utils.visualize_bullish_3d(
-                                result, st.session_state.current_price, st.session_state.expiration_days,
-                                st.session_state.iv, "Bull Call Spread",
-                                options=[long_opt, short_opt], option_actions=["buy", "sell"]
-                            )
-                            if fig:
-                                st.plotly_chart(fig, width='stretch')  # Explicitly render the plot
-                                logger.info("3D plot generated and rendered successfully")
-                            else:
-                                logger.warning("visualize_bullish_3d returned None")
-                                st.warning("No plot data returned from visualization function.")
-                        except Exception as e:
-                            logger.error(f"Error in visualize_bullish_3d: {e}")
-                            st.error(f"Failed to generate 3D plot: {e}")
-                    else:
-                        logger.warning("Options not found for this combination")
-                        st.warning("Datos de opciones no disponibles para esta combinación.")
-                    # Reset the checkbox
-                    edited_df.at[idx, 'Visualize'] = False
-                    st.session_state["bull_call_spread_editor"] = edited_df.to_dict()
+                        if long_opt and short_opt:
+                            try:
+                                utils.visualize_bullish_3d(
+                                    result, st.session_state.current_price, st.session_state.expiration_days,
+                                    st.session_state.iv, "Bull Call Spread",
+                                    options=[long_opt, short_opt], option_actions=["buy", "sell"]
+                                )
+                                logger.info("3D plot triggered successfully")
+                            except Exception as e:
+                                logger.error(f"Error in visualize_bullish_3d: {e}")
+                                st.error(f"Failed to generate 3D plot: {e}")
+                        else:
+                            logger.warning("Options not found for this combination")
+                            st.warning("Datos de opciones no disponibles para esta combinación.")
+                        # Reset the checkbox
+                        edited_df.at[idx, 'Visualize'] = False
+                        st.session_state["bull_call_spread_editor"] = edited_df.to_dict()
 
         # Use data_editor with checkbox column
         edited_df = st.data_editor(
@@ -120,7 +120,7 @@ with tab1:
             st.session_state.commission_rate, True
         )
         if not profit_df.empty:
-            st.dataframe(profit_df.style.format("{:.2f}").background_gradient(cmap='viridis_r', subset=profit_df.columns[profit_df.notna().any()]))  # Avoid NaN warnings
+            st.dataframe(profit_df.style.format("{:.2f}").background_gradient(cmap='viridis_r', subset=profit_df.columns[profit_df.notna().any()]))
         else:
             st.warning("No hay datos disponibles para la matriz de costos.")
             logger.warning("Empty profit_df for Bull Call Spread matrix.")
@@ -146,7 +146,7 @@ with tab2:
         edited_df = detailed_df_put.copy()
         for col in ["Net Credit", "Max Profit", "Max Loss", "Breakeven"]:
             edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}")
-        edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: x)  # Raw number instead of percentage
+        edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: x)  # Raw number
 
         # Convert MultiIndex to a simple index
         if isinstance(edited_df.index, pd.MultiIndex):
@@ -161,48 +161,48 @@ with tab2:
         # Add a visualization column
         edited_df['Visualize'] = False
 
-        # Define callback function with debugging
+        # Define callback function with detailed debugging
         def visualize_callback_put():
             logger.info("Visualize callback triggered for Put Spread")
             edited = st.session_state.get("bull_put_spread_editor", {})
             logger.info(f"Edited state: {edited}")
-            for idx, row in edited_df.iterrows():
-                if edited.get(str(idx), {}).get('Visualize', False):
-                    logger.info(f"Visualizing row {idx}: {row}")
-                    result = {
-                        "net_cost": -float(row["Net Credit"].replace(",", ".")),
-                        "max_profit": float(row["Max Profit"].replace(",", ".")),
-                        "max_loss": float(row["Max Loss"].replace(",", ".")),
-                        "breakeven": float(row["Breakeven"].replace(",", ".")),
-                        "strikes": [float(s) for s in row['Strikes'].split('-')],  # Reconstruct strikes
-                        "num_contracts": st.session_state.num_contracts,
-                        "raw_net": -float(row["Net Credit"].replace(",", "."))
-                    }
-                    short_opt = next((opt for opt in puts if opt["strike"] == result["strikes"][1]), None)
-                    long_opt = next((opt for opt in puts if opt["strike"] == result["strikes"][0]), None)
-                    if short_opt and long_opt:
+            edited_rows = edited.get('edited_rows', {})
+            for idx in edited_rows:
+                if isinstance(idx, int) and 0 <= idx < len(edited_df):
+                    row = edited_df.iloc[idx]
+                    visualize_state = edited_rows[idx].get('Visualize', False)
+                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}")
+                    if visualize_state:
+                        logger.info(f"Visualizing row {idx}: {row}")
+                        result = {
+                            "net_cost": -float(row["Net Credit"].replace(",", ".")),
+                            "max_profit": float(row["Max Profit"].replace(",", ".")),
+                            "max_loss": float(row["Max Loss"].replace(",", ".")),
+                            "breakeven": float(row["Breakeven"].replace(",", ".")),
+                            "strikes": [float(s) for s in row['Strikes'].split('-')],
+                            "num_contracts": st.session_state.num_contracts,
+                            "raw_net": -float(row["Net Credit"].replace(",", "."))
+                        }
+                        short_opt = next((opt for opt in puts if opt["strike"] == result["strikes"][1]), None)
+                        long_opt = next((opt for opt in puts if opt["strike"] == result["strikes"][0]), None)
                         logger.info(f"Options found: short={short_opt}, long={long_opt}")
-                        try:
-                            fig = utils.visualize_bullish_3d(
-                                result, st.session_state.current_price, st.session_state.expiration_days,
-                                st.session_state.iv, "Bull Put Spread",
-                                options=[short_opt, long_opt], option_actions=["sell", "buy"]
-                            )
-                            if fig:
-                                st.plotly_chart(fig, width='stretch')  # Explicitly render the plot
-                                logger.info("3D plot generated and rendered successfully for Put Spread")
-                            else:
-                                logger.warning("visualize_bullish_3d returned None for Put Spread")
-                                st.warning("No plot data returned from visualization function for Put Spread.")
-                        except Exception as e:
-                            logger.error(f"Error in visualize_bullish_3d for Put Spread: {e}")
-                            st.error(f"Failed to generate 3D plot for Put Spread: {e}")
-                    else:
-                        logger.warning("Options not found for this Put Spread combination")
-                        st.warning("Datos de opciones no disponibles para esta combinación.")
-                    # Reset the checkbox
-                    edited_df.at[idx, 'Visualize'] = False
-                    st.session_state["bull_put_spread_editor"] = edited_df.to_dict()
+                        if short_opt and long_opt:
+                            try:
+                                utils.visualize_bullish_3d(
+                                    result, st.session_state.current_price, st.session_state.expiration_days,
+                                    st.session_state.iv, "Bull Put Spread",
+                                    options=[short_opt, long_opt], option_actions=["sell", "buy"]
+                                )
+                                logger.info("3D plot triggered successfully for Put Spread")
+                            except Exception as e:
+                                logger.error(f"Error in visualize_bullish_3d for Put Spread: {e}")
+                                st.error(f"Failed to generate 3D plot for Put Spread: {e}")
+                        else:
+                            logger.warning("Options not found for this Put Spread combination")
+                            st.warning("Datos de opciones no disponibles para esta combinación.")
+                        # Reset the checkbox
+                        edited_df.at[idx, 'Visualize'] = False
+                        st.session_state["bull_put_spread_editor"] = edited_df.to_dict()
 
         # Use data_editor with checkbox column
         edited_df = st.data_editor(
@@ -229,7 +229,7 @@ with tab2:
             st.session_state.commission_rate, False
         )
         if not profit_df.empty:
-            st.dataframe(profit_df.style.format("{:.2f}").background_gradient(cmap='viridis', subset=profit_df.columns[profit_df.notna().any()]))  # Avoid NaN warnings
+            st.dataframe(profit_df.style.format("{:.2f}").background_gradient(cmap='viridis', subset=profit_df.columns[profit_df.notna().any()]))
         else:
             st.warning("No hay datos disponibles para la matriz de créditos.")
             logger.warning("Empty profit_df for Bull Put Spread matrix.")
