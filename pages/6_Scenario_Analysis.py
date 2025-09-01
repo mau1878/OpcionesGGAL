@@ -92,19 +92,27 @@ if submit_button:
         })
         option_details.append({
             "Type": opt["type"].capitalize(),
-            "Strike": opt["strike"],
+            "Strike": float(opt["strike"]),  # Ensure numeric
             "Action": opt["action"].capitalize(),
-            "Contracts": opt["contracts"],
-            "Price": f"{price:.2f}",
-            "Base Cost": f"{base_cost:.2f}",
-            "Fees": f"{fees:.2f}"
+            "Contracts": int(opt["contracts"]),  # Ensure integer
+            "Price": float(price),  # Store as float
+            "Base Cost": float(base_cost),  # Store as float
+            "Fees": float(fees)  # Store as float
         })
 
     if valid and selected_options:
         # Display selected options
         st.subheader("Opciones Seleccionadas")
         df_options = pd.DataFrame(option_details)
-        st.dataframe(df_options.style.format({"Strike": "{:.2f}", "Price": "{:.2f}", "Base Cost": "{:.2f}", "Fees": "{:.2f}"}))
+        st.dataframe(
+            df_options.style.format({
+                "Strike": "{:.2f}",
+                "Price": "{:.2f}",
+                "Base Cost": "{:.2f}",
+                "Fees": "{:.2f}",
+                "Contracts": "{:d}"  # Integer format for Contracts
+            })
+        )
 
         # Calculate and display P&L metrics
         st.subheader("Métricas de la Estrategia")
