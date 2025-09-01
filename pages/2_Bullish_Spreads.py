@@ -1,6 +1,10 @@
 import streamlit as st
 import numpy as np
+import pandas as pd
 import utils
+import logging
+
+logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="Bullish Spreads", layout="wide")
 st.title("Estrategias Alcistas: Spreads")
@@ -11,6 +15,8 @@ if 'filtered_calls' not in st.session_state or not st.session_state.filtered_cal
 
 calls = st.session_state.filtered_calls
 puts = st.session_state.filtered_puts
+min_strike = st.session_state.current_price * (1 - st.session_state.plot_range_pct)
+max_strike = st.session_state.current_price * (1 + st.session_state.plot_range_pct)
 
 tab1, tab2 = st.tabs(["Bull Call Spread", "Bull Put Spread"])
 
@@ -28,32 +34,41 @@ with tab1:
         detailed_df_call = pd.DataFrame()
 
     if not detailed_df_call.empty:
-        for combo, row in detailed_df_call.iterrows():
-            with st.expander(f"Strikes: {combo} - Net Cost: {row['Net Cost']:.2f} - Max Profit: {row['Max Profit']:.2f}"):
-                st.write(row.to_frame().T.style.format({
-                    "Net Cost": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}",
-                    "Cost-to-Profit Ratio": "{:.2%}", "Breakeven": "{:.2f}"
-                }).to_html(), unsafe_allow_html=True)
-                if st.button("Visualize 3D", key=f"viz_bcs_{combo}"):
-                    result = {
-                        "net_cost": row["Net Cost"],
-                        "max_profit": row["Max Profit"],
-                        "max_loss": row["Max Loss"],
-                        "breakeven": row["Breakeven"],
-                        "strikes": list(combo),
-                        "num_contracts": st.session_state.num_contracts,
-                        "raw_net": row["Net Cost"]
-                    }
-                    long_opt = next((opt for opt in calls if opt["strike"] == combo[0]), None)
-                    short_opt = next((opt for opt in calls if opt["strike"] == combo[1]), None)
-                    if long_opt and short_opt:
-                        utils.visualize_bullish_3d(
-                            result, st.session_state.current_price, st.session_state.expiration_days, 
-                            st.session_state.iv, "Bull Call Spread", 
-                            options=[long_opt, short_opt], option_actions=["buy", "sell"]
-                        )
-                    else:
-                        st.warning("Datos de opciones no disponibles para esta combinación.")
+        # Add a column for visualization buttons
+        detailed_df_call['Visualize'] = [f"Visualize_{i}" for i in range(len(detailed_df_call))]
+        styled_df = detailed_df_call.style.format({
+            "Net Cost": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}", 
+            "Cost-to-Profit Ratio": "{:.2%}", "Breakeven": "{:.2f}"
+        })
+        st.dataframe(
+            styled_df,
+            column_config={
+                "Visualize": st.column_config.TextColumn("Visualize", help="Click to generate 3D plot")
+            },
+            use_container_width=True
+        )
+        # Handle button clicks
+        for idx, row in detailed_df_call.iterrows():
+            if st.button("Visualize 3D", key=f"viz_bcs_{idx}_{row['Visualize']}"):
+                result = {
+                    "net_cost": row["Net Cost"],
+                    "max_profit": row["Max Profit"],
+                    "max_loss": row["Max Loss"],
+                    "breakeven": row["Breakeven"],
+                    "strikes": list(idx),
+                    "num_contracts": st.session_state.num_contracts,
+                    "raw_net": row["Net Cost"]
+                }
+                long_opt = next((opt for opt in calls if opt["strike"] == idx[0]), None)
+                short_opt = next((opt for opt in calls if opt["strike"] == idx[1]), None)
+                if long_opt and short_opt:
+                    utils.visualize_bullish_3d(
+                        result, st.session_state.current_price, st.session_state.expiration_days, 
+                        st.session_state.iv, "Bull Call Spread", 
+                        options=[long_opt, short_opt], option_actions=["buy", "sell"]
+                    )
+                else:
+                    st.warning("Datos de opciones no disponibles para esta combinación.")
     else:
         st.warning("No hay datos disponibles para Bull Call Spread. Asegúrese de que hay suficientes opciones call en el rango seleccionado o intente actualizar los datos.")
         logger.warning(f"No data for Bull Call Spread. Filtered calls: {len(calls)}, Strikes: {min_strike:.2f}-{max_strike:.2f}, Expiration: {st.session_state.selected_exp}")
@@ -87,32 +102,41 @@ with tab2:
         detailed_df_put = pd.DataFrame()
 
     if not detailed_df_put.empty:
-        for combo, row in detailed_df_put.iterrows():
-            with st.expander(f"Strikes: {combo} - Net Credit: {row['Net Credit']:.2f} - Max Profit: {row['Max Profit']:.2f}"):
-                st.write(row.to_frame().T.style.format({
-                    "Net Credit": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}",
-                    "Cost-to-Profit Ratio": "{:.2%}", "Breakeven": "{:.2f}"
-                }).to_html(), unsafe_allow_html=True)
-                if st.button("Visualize 3D", key=f"viz_bps_{combo}"):
-                    result = {
-                        "net_cost": -row["Net Credit"],
-                        "max_profit": row["Max Profit"],
-                        "max_loss": row["Max Loss"],
-                        "breakeven": row["Breakeven"],
-                        "strikes": list(combo),
-                        "num_contracts": st.session_state.num_contracts,
-                        "raw_net": -row["Net Credit"]
-                    }
-                    short_opt = next((opt for opt in puts if opt["strike"] == combo[1]), None)
-                    long_opt = next((opt for opt in puts if opt["strike"] == combo[0]), None)
-                    if short_opt and long_opt:
-                        utils.visualize_bullish_3d(
-                            result, st.session_state.current_price, st.session_state.expiration_days, 
-                            st.session_state.iv, "Bull Put Spread", 
-                            options=[short_opt, long_opt], option_actions=["sell", "buy"]
-                        )
-                    else:
-                        st.warning("Datos de opciones no disponibles para esta combinación.")
+        # Add a column for visualization buttons
+        detailed_df_put['Visualize'] = [f"Visualize_{i}" for i in range(len(detailed_df_put))]
+        styled_df = detailed_df_put.style.format({
+            "Net Credit": "{:.2f}", "Max Profit": "{:.2f}", "Max Loss": "{:.2f}", 
+            "Cost-to-Profit Ratio": "{:.2%}", "Breakeven": "{:.2f}"
+        })
+        st.dataframe(
+            styled_df,
+            column_config={
+                "Visualize": st.column_config.TextColumn("Visualize", help="Click to generate 3D plot")
+            },
+            use_container_width=True
+        )
+        # Handle button clicks
+        for idx, row in detailed_df_put.iterrows():
+            if st.button("Visualize 3D", key=f"viz_bps_{idx}_{row['Visualize']}"):
+                result = {
+                    "net_cost": -row["Net Credit"],
+                    "max_profit": row["Max Profit"],
+                    "max_loss": row["Max Loss"],
+                    "breakeven": row["Breakeven"],
+                    "strikes": list(idx),
+                    "num_contracts": st.session_state.num_contracts,
+                    "raw_net": -row["Net Credit"]
+                }
+                short_opt = next((opt for opt in puts if opt["strike"] == idx[1]), None)
+                long_opt = next((opt for opt in puts if opt["strike"] == idx[0]), None)
+                if short_opt and long_opt:
+                    utils.visualize_bullish_3d(
+                        result, st.session_state.current_price, st.session_state.expiration_days, 
+                        st.session_state.iv, "Bull Put Spread", 
+                        options=[short_opt, long_opt], option_actions=["sell", "buy"]
+                    )
+                else:
+                    st.warning("Datos de opciones no disponibles para esta combinación.")
     else:
         st.warning("No hay datos disponibles para Bull Put Spread. Asegúrese de que hay suficientes opciones put en el rango seleccionado o intente actualizar los datos.")
         logger.warning(f"No data for Bull Put Spread. Filtered puts: {len(puts)}, Strikes: {min_strike:.2f}-{max_strike:.2f}, Expiration: {st.session_state.selected_exp}")
