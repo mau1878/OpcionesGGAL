@@ -69,14 +69,13 @@ with tab1:
                     if visualize_state:
                         logger.info(f"Visualizing row {idx}: {row}")
                         result = row.to_dict()
-                        # Use original DataFrame index value as strike for Straddle
-                        original_strike = df.index[idx][0] if isinstance(df.index[idx], tuple) else df.index[idx]
-                        result["strikes"] = [float(original_strike)] if pd.notna(original_strike) else []
+                        # Use edited_df index value as strike for Straddle
+                        strike = edited_df.index[idx]
+                        result["strikes"] = [float(strike)] if pd.notna(strike) else []
                         if not result["strikes"]:
-                            logger.error(f"Invalid strike value: {original_strike}")
-                            st.error(f"Invalid strike value: {original_strike}")
+                            logger.error(f"Invalid strike value: {strike}")
+                            st.error(f"Invalid strike value: {strike}")
                             continue
-                        strike = result["strikes"][0]
                         logger.info(f"Validating strike: {strike}")
                         if strike not in call_strikes or strike not in put_strikes:
                             logger.warning(f"Strike {strike} not found in calls or puts")
@@ -87,7 +86,7 @@ with tab1:
                         result["net_cost"] = float(result["net_cost"])
                         call_opt = next((opt for opt in calls if abs(opt["strike"] - strike) < 0.01), None)
                         put_opt = next((opt for opt in puts if abs(opt["strike"] - strike) < 0.01), None)
-                        logger.info(f"Options found: call={call_opt}, put={put_opt}")
+                        logger.info(f"Options found: call={call_opt}, put={put_opt}, result={result}")
                         if result and call_opt and put_opt:
                             try:
                                 utils.visualize_volatility_3d(
@@ -197,7 +196,7 @@ with tab2:
                         result["net_cost"] = float(result["net_cost"])
                         put_opt = next((opt for opt in puts if abs(opt["strike"] - strikes[0]) < 0.01), None)
                         call_opt = next((opt for opt in calls if abs(opt["strike"] - strikes[1]) < 0.01), None)
-                        logger.info(f"Options found: put={put_opt}, call={call_opt}")
+                        logger.info(f"Options found: put={put_opt}, call={call_opt}, result={result}")
                         if result and put_opt and call_opt:
                             try:
                                 utils.visualize_volatility_3d(
