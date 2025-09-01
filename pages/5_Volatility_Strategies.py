@@ -69,9 +69,12 @@ with tab1:
                     if visualize_state:
                         logger.info(f"Visualizing row {idx}: {row}")
                         result = row.to_dict()
-                        # Use original DataFrame index value as strike for Straddle
-                        strike = df.index[idx]  # Use original index to avoid editor modification
-                        logger.info(f"Extracted strike for idx {idx}: {strike}")
+                        # Use original DataFrame index value as strike for Straddle, handle MultiIndex
+                        strike = df.index[idx]
+                        logger.info(f"Extracted raw strike for idx {idx}: {strike}, type: {type(strike)}")
+                        if isinstance(strike, tuple):
+                            strike = strike[0]  # Take the first element of the MultiIndex tuple
+                        logger.info(f"Processed strike for idx {idx}: {strike}")
                         result["strikes"] = [float(strike)] if pd.notna(strike) else []
                         if not result["strikes"]:
                             logger.error(f"Invalid strike value: {strike}")
