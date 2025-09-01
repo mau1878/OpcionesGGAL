@@ -92,12 +92,12 @@ if submit_button:
         })
         option_details.append({
             "Type": opt["type"].capitalize(),
-            "Strike": float(opt["strike"]),  # Ensure numeric
+            "Strike": float(opt["strike"]),
             "Action": opt["action"].capitalize(),
-            "Contracts": int(opt["contracts"]),  # Ensure integer
-            "Price": float(price),  # Store as float
-            "Base Cost": float(base_cost),  # Store as float
-            "Fees": float(fees)  # Store as float
+            "Contracts": int(opt["contracts"]),
+            "Price": float(price),
+            "Base Cost": float(base_cost),
+            "Fees": float(fees)
         })
 
     if valid and selected_options:
@@ -110,7 +110,7 @@ if submit_button:
                 "Price": "{:.2f}",
                 "Base Cost": "{:.2f}",
                 "Fees": "{:.2f}",
-                "Contracts": "{:d}"  # Integer format for Contracts
+                "Contracts": "{:d}"
             })
         )
 
@@ -145,15 +145,17 @@ if submit_button:
                                           [opt["action"] for opt in selected_options])
         iv_calibrated = max(iv_calibrated, 1e-9)
 
-        # Compute payoff grid
+        # Compute payoff grid for 3D plot
         min_price = current_price * (1 - plot_range_pct)
         max_price = current_price * (1 + plot_range_pct)
         price_points = np.linspace(min_price, max_price, 50)
-        time_points = np.linspace(0, expiration_days / 365.0, 20)
-        X, Y = np.meshgrid(price_points, time_points)
-        Z = np.array([[strategy_value(p, t, iv_calibrated) - net_cost for p in price_points] for t in time_points])
+        time_points_days = np.linspace(0, expiration_days, 20)
+        time_points_years = time_points_days / 365.0
+        X, Y = np.meshgrid(price_points, time_points_days)
+        Z = np.array([[strategy_value(p, t, iv_calibrated) - net_cost for p in price_points] for t in time_points_years])
 
         # Create 3D plot
+        st.subheader("P&L 3D")
         fig = go.Figure(data=[
             go.Surface(
                 x=X, y=Y, z=Z,
@@ -166,22 +168,69 @@ if submit_button:
             title=f"3D P&L para Estrategia Personalizada (IV: {iv_calibrated:.1%})",
             scene=dict(
                 xaxis_title="Precio de GGAL (ARS)",
-                yaxis_title="Tiempo hasta Vencimiento (Años)",
+                yaxis_title="Tiempo hasta Vencimiento (Días)",
                 zaxis_title="P&L (ARS)",
                 xaxis=dict(tickvals=[min_price, current_price, max_price], ticktext=[f"{min_price:.2f}", f"{current_price:.2f}", f"{max_price:.2f}"]),
-                yaxis=dict(tickvals=[0, expiration_days/365.0], ticktext=["Expiración", f"{expiration_days} días"]),
+                yaxis=dict(tickvals=[0, expiration_days], ticktext=["Expiración", f"{int(expiration_days)} días"]),
             ),
             margin=dict(l=0, r=0, b=0, t=40),
             height=600
         )
         fig.add_trace(go.Scatter3d(
-            x=[current_price], y=[expiration_days/365.0], z=[0],
+            x=[current_price], y=[expiration_days], z=[0],
             mode="markers",
             marker=dict(size=5, color="red"),
             name="Precio Actual"
         ))
-
         st.plotly_chart(fig, use_container_width=True, key="scenario_3d_plot")
+
+        # Add 2D Payoff Diagram at Expiration
+        st.subheader("Diagrama de P&L al Vencimiento")
+        price_points = np.linspace(min_price, max_price, 100)
+        payoff_at_expiration = [strategy_value(p, 0, iv_calibrated) - net_cost for p in price_points]
+
+        fig_2d = go.Figure()
+        fig_2d.add_trace(
+            go.Scatter(
+                x=price_points,
+                y=payoff_at_expiration,
+                mode="lines",
+                name="P&L al Vencimiento",
+                line=dict(color="blue")
+            )
+        )
+        fig_2d.add_trace(
+            go.Scatter(
+                x=[current_price],
+                y=[strategy_value(current_price, 0, iv_calibrated) - net_cost],
+                mode="markers",
+                name="Precio Actual",
+                marker=dict(size=10, color="red")
+            )
+        )
+        fig_2d.update_layout(
+            title="P&L al Vencimiento",
+            xaxis_title="Precio de GGAL (ARS)",
+            yaxis_title="P&L (ARS)",
+            xaxis=dict(tickvals=[min_price, current_price, max_price], ticktext=[f"{min_price:.2f}", f"{current_price:.2f}", f"{max_price:.2f}"]),
+            yaxis=dict(zeroline=True, zerolinecolor="black", zerolinewidth=1),
+            showlegend=True,
+            height=400
+        )
+
+        # Calculate breakeven points
+        def find_breakeven(price_range, tolerance=1e-3):
+            breakevens = []
+            for p in np.linspace(min_price, max_price, 1000):
+                if abs(strategy_value(p, 0, iv_calibrated) - net_cost) < tolerance:
+                    breakevens.append(p)
+            return breakevens
+
+        breakevens = find_breakeven([min_price, max_price])
+        for b in breakevens[:2]:
+            fig_2d.add_vline(x=b, line_dash="dash", line_color="green", annotation_text=f"Breakeven: {b:.2f}")
+
+        st.plotly_chart(fig_2d, use_container_width=True, key="scenario_2d_plot")
     elif not selected_options:
         st.warning("Por favor, seleccione al menos una opción con contratos mayores a 0.")
     else:
