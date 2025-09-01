@@ -39,15 +39,13 @@ with tab1:
             edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}")
         edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: x)  # Raw number
 
-        # Preserve the original index as strike, only reset if MultiIndex and extract strike
+        # Preserve the original index as strike, handle MultiIndex
         if isinstance(edited_df.index, pd.MultiIndex):
+            logger.info(f"Straddle DataFrame has MultiIndex: {edited_df.index.names}")
             edited_df = edited_df.reset_index()
-            edited_df = edited_df.rename(columns={'level_0': 'Strike'})
-            # Set the first level of MultiIndex as the index if it represents the strike
+            edited_df = edited_df.rename(columns={'level_0': 'Strike'})  # Assume first level is strike
             edited_df.set_index('Strike', inplace=True)
-        else:
-            # Ensure the index remains the strike value
-            pass  # No reset needed if already a single strike index
+        logger.info(f"Straddle DataFrame index after processing: {edited_df.index.tolist()}")
 
         # Add a visualization column
         edited_df['Visualize'] = False
@@ -72,8 +70,8 @@ with tab1:
                         logger.info(f"Visualizing row {idx}: {row}")
                         result = row.to_dict()
                         # Use original DataFrame index value as strike for Straddle
-                        original_strike = df.index[idx] if pd.notna(df.index[idx]) else None
-                        result["strikes"] = [float(original_strike)] if original_strike is not None else []
+                        original_strike = df.index[idx][0] if isinstance(df.index[idx], tuple) else df.index[idx]
+                        result["strikes"] = [float(original_strike)] if pd.notna(original_strike) else []
                         if not result["strikes"]:
                             logger.error(f"Invalid strike value: {original_strike}")
                             st.error(f"Invalid strike value: {original_strike}")
