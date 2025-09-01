@@ -65,23 +65,33 @@ with tab1:
                 if isinstance(idx, int) and 0 <= idx < len(edited_df):
                     row = edited_df.iloc[idx]
                     visualize_state = edited_rows[idx].get('Visualize', False)
-                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}")
+                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}, row.name={row.name}, Strikes={row['Strikes']}")
                     if visualize_state:
                         logger.info(f"Visualizing row {idx}: {row}")
                         result = row.to_dict()
-                        result["strikes"] = list(row.name) if isinstance(row.name, tuple) else [row.name]
+                        # Use Strikes column instead of row.name
+                        strikes = [float(s) for s in row['Strikes'].split('-')]
+                        if len(strikes) != 2:
+                            logger.error(f"Invalid strike pair: {row['Strikes']}")
+                            st.error(f"Invalid strike pair: {row['Strikes']}")
+                            continue
+                        result["strikes"] = strikes
                         result["num_contracts"] = st.session_state.num_contracts
-                        result["raw_net"] = -result.get("Net Credit", 0)
-                        result["net_cost"] = -result.get("Net Credit", 0)
-                        short_opt = next((opt for opt in calls if opt["strike"] == result["strikes"][0]), None)
-                        long_opt = next((opt for opt in calls if opt["strike"] == result["strikes"][1]), None)
+                        result["raw_net"] = -float(result.get("Net Credit", 0))
+                        result["net_cost"] = -float(result.get("Net Credit", 0))
+                        short_opt = next((opt for opt in calls if opt["strike"] == strikes[0]), None)
+                        long_opt = next((opt for opt in calls if opt["strike"] == strikes[1]), None)
                         logger.info(f"Options found: short={short_opt}, long={long_opt}")
                         if result and short_opt and long_opt:
-                            utils.visualize_bearish_3d(
-                                result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
-                                "Bear Call Spread", options=[short_opt, long_opt], option_actions=["sell", "buy"]
-                            )
-                            logger.info("3D plot triggered successfully for Bear Call Spread")
+                            try:
+                                utils.visualize_bearish_3d(
+                                    result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
+                                    "Bear Call Spread", options=[short_opt, long_opt], option_actions=["sell", "buy"]
+                                )
+                                logger.info("3D plot triggered successfully for Bear Call Spread")
+                            except Exception as e:
+                                logger.error(f"Error in visualize_bearish_3d: {e}")
+                                st.error(f"Failed to generate 3D plot: {e}")
                         else:
                             logger.warning("Options not found for this combination")
                             st.warning("Selección inválida o datos de opciones no disponibles.")
@@ -178,23 +188,33 @@ with tab2:
                 if isinstance(idx, int) and 0 <= idx < len(edited_df):
                     row = edited_df.iloc[idx]
                     visualize_state = edited_rows[idx].get('Visualize', False)
-                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}")
+                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}, row.name={row.name}, Strikes={row['Strikes']}")
                     if visualize_state:
                         logger.info(f"Visualizing row {idx}: {row}")
                         result = row.to_dict()
-                        result["strikes"] = list(row.name) if isinstance(row.name, tuple) else [row.name]
+                        # Use Strikes column instead of row.name
+                        strikes = [float(s) for s in row['Strikes'].split('-')]
+                        if len(strikes) != 2:
+                            logger.error(f"Invalid strike pair: {row['Strikes']}")
+                            st.error(f"Invalid strike pair: {row['Strikes']}")
+                            continue
+                        result["strikes"] = strikes
                         result["num_contracts"] = st.session_state.num_contracts
-                        result["raw_net"] = result.get("Net Cost", 0)
-                        result["net_cost"] = result.get("Net Cost", 0)
-                        long_opt = next((opt for opt in puts if opt["strike"] == result["strikes"][1]), None)
-                        short_opt = next((opt for opt in puts if opt["strike"] == result["strikes"][0]), None)
+                        result["raw_net"] = float(result.get("Net Cost", 0))
+                        result["net_cost"] = float(result.get("Net Cost", 0))
+                        long_opt = next((opt for opt in puts if opt["strike"] == strikes[1]), None)
+                        short_opt = next((opt for opt in puts if opt["strike"] == strikes[0]), None)
                         logger.info(f"Options found: long={long_opt}, short={short_opt}")
                         if result and long_opt and short_opt:
-                            utils.visualize_bearish_3d(
-                                result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
-                                "Bear Put Spread", options=[long_opt, short_opt], option_actions=["buy", "sell"]
-                            )
-                            logger.info("3D plot triggered successfully for Bear Put Spread")
+                            try:
+                                utils.visualize_bearish_3d(
+                                    result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
+                                    "Bear Put Spread", options=[long_opt, short_opt], option_actions=["buy", "sell"]
+                                )
+                                logger.info("3D plot triggered successfully for Bear Put Spread")
+                            except Exception as e:
+                                logger.error(f"Error in visualize_bearish_3d: {e}")
+                                st.error(f"Failed to generate 3D plot: {e}")
                         else:
                             logger.warning("Options not found for this combination")
                             st.warning("Selección inválida o datos de opciones no disponibles.")
