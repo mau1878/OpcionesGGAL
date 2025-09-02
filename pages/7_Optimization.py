@@ -20,7 +20,6 @@ calls = st.session_state.filtered_calls
 puts = st.session_state.filtered_puts
 current_price = st.session_state.current_price
 expiration_days = st.session_state.expiration_days
-iv = st.session_state.iv
 risk_free_rate = st.session_state.risk_free_rate
 num_contracts = st.session_state.num_contracts
 commission_rate = st.session_state.commission_rate
@@ -40,6 +39,10 @@ limit_loss = st.sidebar.checkbox("Evitar pérdidas ilimitadas", value=True)
 if "optimal_strategy" not in st.session_state:
     st.session_state["optimal_strategy"] = None
 
+# Track IV calibration failures
+if "iv_failure_count" not in st.session_state:
+    st.session_state["iv_failure_count"] = 0
+
 # Function to check for limited loss
 def has_limited_loss(options, actions, contracts):
     call_positions = {}
@@ -53,14 +56,12 @@ def has_limited_loss(options, actions, contracts):
         else:
             put_positions[strike] = put_positions.get(strike, 0) + multiplier
     
-    # Check calls: Net short position at highest strike indicates unlimited loss
     if call_positions:
         max_strike = max(call_positions.keys())
         net_call_position = sum(call_positions.values())
         if call_positions[max_strike] < 0 or (net_call_position < 0 and max(call_positions, key=lambda k: call_positions[k]) == max_strike):
             return False
     
-    # Check puts: Net short position at lowest strike indicates large loss potential
     if put_positions:
         min_strike = min(put_positions.keys())
         net_put_position = sum(put_positions.values())
@@ -89,8 +90,13 @@ def calculate_strategy_cost(options, actions, contracts):
     total_cost = 0.0
     for opt, action, num in zip(options, actions, contracts):
         price = utils.get_strategy_price(opt, action)
-        if price is None or price <= 0:
-            logger.debug(f"Invalid price for option {opt['symbol']}: price={price}, action={action}")
+        px_bid = opt.get("px_bid", 0)
+        px_ask = opt.get("px_ask", 0)
+        if price is None or price <= 0 or px_bid <= 0 or px_ask <= 0 or px_bid > px_ask:
+            logger.debug(f"Invalid price for option {opt['symbol']}: price={price}, bid={px_bid}, ask={px_ask}, action={action}")
+            return None
+        if abs(px_ask - px_bid) / max(px_ask, px_bid) > 0.5:  # Skip wide bid-ask spreads
+            logger.debug(f"Wide bid-ask spread for option {opt['symbol']}: bid={px_bid}, ask={px_ask}")
             return None
         base_cost = price * 100 * num * (1 if action == "buy" else -1)
         if abs(base_cost) < 1e-6:
@@ -145,6 +151,7 @@ if st.button("Buscar Estrategia Óptima"):
     with st.spinner("Buscando la estrategia óptima..."):
         all_options = calls + puts
         st.session_state["optimal_strategy"] = None
+        st.session_state["iv_failure_count"] = 0
         best_prob = 0.0
         best_strategy = None
 
@@ -163,16 +170,16 @@ if st.button("Buscar Estrategia Óptima"):
                     continue
 
                 net_cost = calculate_strategy_cost(options, actions, contracts)
-                if net_cost is None or abs(net_cost) > 500000:
-                    logger.debug(f"Skipped strategy: Invalid cost or too large (net_cost={net_cost})")
+                if net_cost is None or abs(net_cost) > 500000 or abs(net_cost) < 100:
+                    logger.debug(f"Skipped strategy: Invalid cost or extreme (net_cost={net_cost}), options={[(opt['symbol'], action, num) for opt, action, num in zip(options, actions, contracts)]}")
                     continue
 
                 raw_net = sum(
                     utils.get_strategy_price(opt, action) * num * 100 * (1 if action == "buy" else -1)
                     for opt, action, num in zip(options, actions, contracts)
                 )
-                if abs(raw_net) < 100:
-                    logger.debug(f"Skipped strategy: Near-zero raw_net ({raw_net})")
+                if abs(raw_net) < 100 or abs(raw_net) > 500000:
+                    logger.debug(f"Skipped strategy: Extreme raw_net ({raw_net}), options={[(opt['symbol'], action, num) for opt, action, num in zip(options, actions, contracts)]}")
                     continue
 
                 T_years = expiration_days / 365.0
@@ -182,7 +189,8 @@ if st.button("Buscar Estrategia Óptima"):
                     options, actions
                 )
                 if iv_calibrated < 0.01 or iv_calibrated > 5.0:
-                    logger.debug(f"Skipped strategy: Unrealistic IV ({iv_calibrated}), options={[(opt['symbol'], action) for opt, action in zip(options, actions)]}")
+                    st.session_state["iv_failure_count"] += 1
+                    logger.debug(f"Unrealistic IV ({iv_calibrated}), using fallback IV=0.30, options={[(opt['symbol'], action, num) for opt, action, num in zip(options, actions, contracts)]}")
                     iv_calibrated = 0.30  # Fallback to DEFAULT_IV
 
                 prob = estimate_breakeven_probability(options, actions, contracts, net_cost, T_years, iv_calibrated)
@@ -200,6 +208,8 @@ if st.button("Buscar Estrategia Óptima"):
         if best_strategy:
             st.session_state["optimal_strategy"] = best_strategy
             st.success(f"Estrategia óptima encontrada con probabilidad de P&L ≥ 0: {best_prob:.1%}")
+            if st.session_state["iv_failure_count"] > 0:
+                st.warning(f"Se detectaron {st.session_state['iv_failure_count']} problemas de calibración de volatilidad. Se usó una volatilidad por defecto (30%) en algunos casos.")
         else:
             st.warning("No se encontró ninguna estrategia que cumpla con los criterios de probabilidad mínima.")
             logger.warning("No optimal strategy found.")
