@@ -176,25 +176,28 @@ if submit_button:
                 x=X_plane,
                 y=Y_plane,
                 z=Z_plane,
-                colorscale=[[0, 'rgba(255, 0, 0, 0.2)'], [1, 'rgba(255, 0, 0, 0.2)']],
+                colorscale=[[0, 'rgba(255, 0, 0, 0.3)'], [1, 'rgba(255, 0, 0, 0.3)']],
                 showscale=False,
                 name="Precio Actual",
-                opacity=0.2
+                opacity=0.3
             )
         )
 
         # Add horizontal blue plane at P&L = 0 (low opacity)
         x_range = [min_price, max_price]
+        y_range = [0, expiration_days]
+        X_plane_horizontal = np.array([[x_range[0], x_range[1]], [x_range[0], x_range[1]]])
+        Y_plane_horizontal = np.array([[y_range[0], y_range[0]], [y_range[1], y_range[1]]])
         Z_plane_horizontal = np.array([[0, 0], [0, 0]])
         fig.add_trace(
             go.Surface(
-                x=np.array([x_range, x_range]),
-                y=np.array([[y_range[0], y_range[1]], [y_range[0], y_range[1]]]),
+                x=X_plane_horizontal,
+                y=Y_plane_horizontal,
                 z=Z_plane_horizontal,
-                colorscale=[[0, 'rgba(0, 0, 255, 0.2)'], [1, 'rgba(0, 0, 255, 0.2)']],
+                colorscale=[[0, 'rgba(0, 0, 255, 0.3)'], [1, 'rgba(0, 0, 255, 0.3)']],
                 showscale=False,
                 name="Punto de Equilibrio",
-                opacity=0.2
+                opacity=0.3
             )
         )
 
@@ -206,6 +209,7 @@ if submit_button:
                 zaxis_title="P&L (ARS)",
                 xaxis=dict(tickvals=[min_price, current_price, max_price], ticktext=[f"{min_price:.2f}", f"{current_price:.2f}", f"{max_price:.2f}"]),
                 yaxis=dict(tickvals=[0, expiration_days], ticktext=["Expiración", f"{int(expiration_days)} días"]),
+                zaxis=dict(range=[z_min, z_max]),  # Ensure z-axis includes P&L = 0
             ),
             margin=dict(l=0, r=0, b=0, t=40),
             height=600
@@ -217,6 +221,7 @@ if submit_button:
             name="Precio Actual"
         ))
         st.plotly_chart(fig, use_container_width=True, key="scenario_3d_plot")
+
 
 
         # Add 2D Payoff Diagram at Expiration
