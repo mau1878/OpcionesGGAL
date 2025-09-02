@@ -159,7 +159,11 @@ if submit_button:
         fig = go.Figure(data=[
             go.Surface(
                 x=X, y=Y, z=Z,
-                colorscale='Viridis',
+                colorscale=[
+                    [0, 'rgb(255, 0, 0)'],  # Red for most negative P&L
+                    [0.5, 'rgb(255, 255, 255)'],  # White at P&L = 0
+                    [1, 'rgb(0, 128, 0)']  # Green for most positive P&L
+                ],
                 showscale=True,
                 colorbar=dict(title="P&L (ARS)"),
             )
