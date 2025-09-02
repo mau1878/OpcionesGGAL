@@ -183,7 +183,7 @@ if submit_button:
                 colorscale=[[0, 'rgba(255, 0, 0, 0.3)'], [1, 'rgba(255, 0, 0, 0.3)']],
                 showscale=False,
                 name="Precio Actual",
-                opacity=0.3
+                opacity=0.5
             )
         )
 
@@ -201,7 +201,7 @@ if submit_button:
                 colorscale=[[0, 'rgba(0, 0, 255, 0.3)'], [1, 'rgba(0, 0, 255, 0.3)']],
                 showscale=False,
                 name="Punto de Equilibrio",
-                opacity=0.3
+                opacity=0.5
             )
         )
 
