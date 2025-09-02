@@ -217,7 +217,7 @@ if submit_button:
                 zaxis=dict(range=[z_min, z_max]),  # Ensure z-axis includes P&L = 0
             ),
             margin=dict(l=0, r=0, b=0, t=40),
-            height=600
+            height=1000
         )
         fig.add_trace(go.Scatter3d(
             x=[current_price], y=[expiration_days], z=[0],
