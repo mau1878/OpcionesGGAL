@@ -201,6 +201,11 @@ if submit_button:
             )
         )
 
+        # Define more markers for the time axis
+        num_ticks = 5  # Number of ticks including start and end
+        tick_vals = np.linspace(0, expiration_days, num_ticks)
+        tick_text = [f"{int(t)} días" for t in tick_vals]
+        tick_text[0] = "Expiración"  # Label for t=0
         fig.update_layout(
             title=f"3D P&L para Estrategia Personalizada (IV: {iv_calibrated:.1%})",
             scene=dict(
