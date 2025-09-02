@@ -201,19 +201,25 @@ if submit_button:
             )
         )
 
-        # Define more markers for the time axis
-        num_ticks = 5  # Number of ticks including start and end
-        tick_vals = np.linspace(0, expiration_days, num_ticks)
-        tick_text = [f"{int(t)} días" for t in tick_vals]
-        tick_text[0] = "Expiración"  # Label for t=0
+        # Define more markers for the time axis (y-axis)
+        num_time_ticks = 5  # Number of ticks including start and end
+        tick_vals_time = np.linspace(0, expiration_days, num_time_ticks)
+        tick_text_time = [f"{int(t)} días" for t in tick_vals_time]
+        tick_text_time[0] = "Expiración"  # Label for t=0
+
+        # Define more markers for the price axis (x-axis)
+        num_price_ticks = 7  # Number of ticks including min, current, and max
+        tick_vals_price = np.linspace(min_price, max_price, num_price_ticks)
+        tick_text_price = [f"{p:.2f}" for p in tick_vals_price]
+
         fig.update_layout(
             title=f"3D P&L para Estrategia Personalizada (IV: {iv_calibrated:.1%})",
             scene=dict(
                 xaxis_title="Precio de GGAL (ARS)",
                 yaxis_title="Tiempo hasta Vencimiento (Días)",
                 zaxis_title="P&L (ARS)",
-                xaxis=dict(tickvals=[min_price, current_price, max_price], ticktext=[f"{min_price:.2f}", f"{current_price:.2f}", f"{max_price:.2f}"]),
-                yaxis=dict(tickvals=[0, expiration_days], ticktext=["Expiración", f"{int(expiration_days)} días"]),
+                xaxis=dict(tickvals=tick_vals_price, ticktext=tick_text_price),
+                yaxis=dict(tickvals=tick_vals_time, ticktext=tick_text_time),
                 zaxis=dict(range=[z_min, z_max]),  # Ensure z-axis includes P&L = 0
             ),
             margin=dict(l=0, r=0, b=0, t=40),
@@ -226,6 +232,7 @@ if submit_button:
             name="Precio Actual"
         ))
         st.plotly_chart(fig, use_container_width=True, key="scenario_3d_plot")
+
 
 
 
