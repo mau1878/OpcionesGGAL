@@ -24,8 +24,10 @@ risk_free_rate = st.session_state.risk_free_rate
 commission_rate = st.session_state.commission_rate
 
 # Log available strikes for debugging
-call_strikes = sorted({opt["strike"] for opt in calls})
-put_strikes = sorted({opt["strike"] for opt in puts})
+call_strikes_set = {opt["strike"] for opt in calls}
+put_strikes_set = {opt["strike"] for opt in puts}
+call_strikes = sorted(call_strikes_set)
+put_strikes = sorted(put_strikes_set)
 logger.info(f"Available call strikes: {call_strikes}")
 logger.info(f"Available put strikes: {put_strikes}")
 
@@ -143,7 +145,7 @@ def find_breakeven(options, actions, contracts, net_cost, iv_calibrated, min_pri
 # Generate all straddle and strangle combinations
 def generate_strategy_combinations():
     strategies = []
-    common_strikes = sorted(call_strikes & put_strikes)  # Strikes available for both calls and puts
+    common_strikes = sorted(call_strikes_set & put_strikes_set)  # Use sets for intersection
     num_contracts = st.session_state.num_contracts
     T_years = expiration_days / 365.0
 
