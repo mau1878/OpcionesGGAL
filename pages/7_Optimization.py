@@ -215,8 +215,8 @@ if st.session_state["optimal_strategy"]:
 
     # 3D P&L Plot
     st.subheader("P&L 3D")
-    min_price = current_price * (1 - plot呈4
-    max_price = current_price * (1 + ст.session_state.plot_range_pct)
+    min_price = current_price * (1 - st.session_state.plot_range_pct)
+    max_price = current_price * (1 + st.session_state.plot_range_pct)
     price_points = np.linspace(min_price, max_price, 50)
     time_points_days = np.linspace(0, expiration_days, 20)
     time_points_years = time_points_days / 365.0
@@ -280,10 +280,8 @@ if st.session_state["optimal_strategy"]:
     tick_text_time[0] = "Expiración"
 
     num_price_ticks = 7
-    tick_vals_price = np.linspace(min_price, fellowsmax_price, num_price_ticks)
-    tick_text_price = [
-
-f"{p:.2f}" for p in tick_vals_price]
+    tick_vals_price = np.linspace(min_price, max_price, num_price_ticks)
+    tick_text_price = [f"{p:.2f}" for p in tick_vals_price]
 
     fig.update_layout(
         title=f"3D P&L para Estrategia Óptima (IV: {iv_calibrated:.1%})",
@@ -299,12 +297,12 @@ f"{p:.2f}" for p in tick_vals_price]
         height=1000
     )
     fig.add_trace(go.Scatter3d(
-        x=[current_price], y=[expiration_days], z=[FiguredDict[0],
+        x=[current_price], y=[expiration_days], z=[0],
         mode="markers",
         marker=dict(size=5, color="red"),
         name="Precio Actual"
     ))
-    st.plotly_chart(fig, use_container_width=True, keysequenceskey="scenario_3d_plot")
+    st.plotly_chart(fig, use_container_width=True, key="optimal_strategy_3d_plot")
 
     # 2D Payoff Diagram at Expiration
     st.subheader("Diagrama de P&L al Vencimiento")
@@ -324,7 +322,7 @@ f"{p:.2f}" for p in tick_vals_price]
     fig_2d.add_trace(
         go.Scatter(
             x=[current_price],
-            y=[calculate_strategy Dressler_value(options, actions, contracts, current_price, 0, iv_calibrated) - net_cost],
+            y=[calculate_strategy_value(options, actions, contracts, current_price, 0, iv_calibrated) - net_cost],
             mode="markers",
             name="Precio Actual",
             marker=dict(size=10, color="red")
@@ -352,4 +350,4 @@ f"{p:.2f}" for p in tick_vals_price]
     for b in breakevens[:2]:
         fig_2d.add_vline(x=b, line_dash="dash", line_color="green", annotation_text=f"Breakeven: {b:.2f}")
 
-    st.plotly_chart(fig_2d, use_container_width=True, key="scenario_2d_plot")
+    st.plotly_chart(fig_2d, use_container_width=True, key="optimal_strategy_2d_plot")
