@@ -164,6 +164,40 @@ if submit_button:
                 colorbar=dict(title="P&L (ARS)"),
             )
         ])
+
+        # Add vertical red plane at current price (low opacity)
+        y_range = [0, expiration_days]
+        z_min, z_max = np.min(Z), np.max(Z)
+        X_plane = np.array([[current_price, current_price], [current_price, current_price]])
+        Y_plane = np.array([[y_range[0], y_range[0]], [y_range[1], y_range[1]]])
+        Z_plane = np.array([[z_min, z_max], [z_min, z_max]])
+        fig.add_trace(
+            go.Surface(
+                x=X_plane,
+                y=Y_plane,
+                z=Z_plane,
+                colorscale=[[0, 'rgba(255, 0, 0, 0.2)'], [1, 'rgba(255, 0, 0, 0.2)']],
+                showscale=False,
+                name="Precio Actual",
+                opacity=0.2
+            )
+        )
+
+        # Add horizontal blue plane at P&L = 0 (low opacity)
+        x_range = [min_price, max_price]
+        Z_plane_horizontal = np.array([[0, 0], [0, 0]])
+        fig.add_trace(
+            go.Surface(
+                x=np.array([x_range, x_range]),
+                y=np.array([[y_range[0], y_range[1]], [y_range[0], y_range[1]]]),
+                z=Z_plane_horizontal,
+                colorscale=[[0, 'rgba(0, 0, 255, 0.2)'], [1, 'rgba(0, 0, 255, 0.2)']],
+                showscale=False,
+                name="Punto de Equilibrio",
+                opacity=0.2
+            )
+        )
+
         fig.update_layout(
             title=f"3D P&L para Estrategia Personalizada (IV: {iv_calibrated:.1%})",
             scene=dict(
@@ -183,6 +217,7 @@ if submit_button:
             name="Precio Actual"
         ))
         st.plotly_chart(fig, use_container_width=True, key="scenario_3d_plot")
+
 
         # Add 2D Payoff Diagram at Expiration
         st.subheader("Diagrama de P&L al Vencimiento")
