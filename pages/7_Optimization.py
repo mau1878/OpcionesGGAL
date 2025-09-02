@@ -27,17 +27,47 @@ commission_rate = st.session_state.commission_rate
 plot_range_pct = st.session_state.plot_range_pct
 
 st.header("Buscar Estrategia Óptima")
-st.write("Encuentra la estrategia de opciones que maximiza la probabilidad de estar por encima del nivel de breakeven al vencimiento.")
+st.write("Encuentra la estrategia de opciones que maximiza la probabilidad de estar por encima del nivel de breakeven al vencimiento, con pérdida limitada.")
 
 # Sidebar inputs for optimization constraints
 st.sidebar.header("Parámetros de Optimización")
 max_options = st.sidebar.number_input("Número máximo de opciones en la estrategia", min_value=1, max_value=4, value=2, step=1)
 max_contracts_per_option = st.sidebar.number_input("Contratos máximos por opción", min_value=1, max_value=5, value=3, step=1)
 min_probability = st.sidebar.slider("Probabilidad mínima aceptable (%)", 0.0, 100.0, 50.0) / 100
+limit_loss = st.sidebar.checkbox("Evitar pérdidas ilimitadas", value=True)
 
 # Initialize session state for results
 if "optimal_strategy" not in st.session_state:
     st.session_state["optimal_strategy"] = None
+
+# Function to check for limited loss
+def has_limited_loss(options, actions, contracts):
+    call_positions = {}
+    put_positions = {}
+    for opt, action, num in zip(options, actions, contracts):
+        strike = opt["strike"]
+        opt_type = opt["type"]
+        multiplier = num if action == "buy" else -num
+        if opt_type == "call":
+            call_positions[strike] = call_positions.get(strike, 0) + multiplier
+        else:
+            put_positions[strike] = put_positions.get(strike, 0) + multiplier
+    
+    # Check calls: Net short position at highest strike indicates unlimited loss
+    if call_positions:
+        max_strike = max(call_positions.keys())
+        net_call_position = sum(call_positions.values())
+        if call_positions[max_strike] < 0 or (net_call_position < 0 and max(call_positions, key=lambda k: call_positions[k]) == max_strike):
+            return False
+    
+    # Check puts: Net short position at lowest strike indicates large loss potential
+    if put_positions:
+        min_strike = min(put_positions.keys())
+        net_put_position = sum(put_positions.values())
+        if put_positions[min_strike] < 0 or (net_put_position < 0 and min(put_positions, key=lambda k: put_positions[k]) == min_strike):
+            return False
+    
+    return True
 
 # Function to calculate strategy P&L
 def calculate_strategy_value(options, actions, contracts, price, T, sigma):
@@ -59,11 +89,18 @@ def calculate_strategy_cost(options, actions, contracts):
     total_cost = 0.0
     for opt, action, num in zip(options, actions, contracts):
         price = utils.get_strategy_price(opt, action)
-        if price is None:
+        if price is None or price <= 0:
+            logger.debug(f"Invalid price for option {opt['symbol']}: price={price}, action={action}")
             return None
         base_cost = price * 100 * num * (1 if action == "buy" else -1)
+        if abs(base_cost) < 1e-6:
+            logger.debug(f"Near-zero base cost for option {opt['symbol']}: base_cost={base_cost}")
+            return None
         fees = utils.calculate_fees(abs(base_cost), commission_rate)
         total_cost += base_cost + fees
+    if abs(total_cost) < 1e-6:
+        logger.debug(f"Total cost too small: {total_cost}")
+        return None
     return total_cost
 
 # Function to estimate probability of P&L >= 0
@@ -71,23 +108,19 @@ def estimate_breakeven_probability(options, actions, contracts, net_cost, T_year
     def payoff_at_expiration(price):
         return calculate_strategy_value(options, actions, contracts, price, 0, sigma) - net_cost
 
-    # Find breakeven points by checking where payoff crosses zero
     price_range = np.linspace(current_price * (1 - plot_range_pct), current_price * (1 + plot_range_pct), 1000)
     payoffs = [payoff_at_expiration(p) for p in price_range]
     breakeven_points = []
     for i in range(1, len(payoffs)):
-        if payoffs[i-1] * payoffs[i] <= 0:  # Sign change indicates breakeven
+        if payoffs[i-1] * payoffs[i] <= 0:
             breakeven = price_range[i-1] + (price_range[i] - price_range[i-1]) * (-payoffs[i-1]) / (payoffs[i] - payoffs[i-1])
             breakeven_points.append(breakeven)
 
     if not breakeven_points:
-        return 0.0  # No breakeven points found
+        return 0.0
 
-    # Assume log-normal distribution for stock price at expiration
     mu = np.log(current_price) + (risk_free_rate - 0.5 * sigma**2) * T_years
     sigma_t = sigma * np.sqrt(T_years)
-
-    # Calculate probability where P&L >= 0
     prob = 0.0
     sorted_breakevens = sorted(breakeven_points)
     for i in range(0, len(sorted_breakevens) + 1):
@@ -100,7 +133,6 @@ def estimate_breakeven_probability(options, actions, contracts, net_cost, T_year
         else:
             lower = sorted_breakevens[i-1]
             upper = sorted_breakevens[i]
-        # Check if region gives positive payoff
         mid_point = (lower + upper) / 2
         if payoff_at_expiration(mid_point) >= 0:
             lower_log = np.log(lower) if lower > 0 else -np.inf
@@ -112,46 +144,47 @@ def estimate_breakeven_probability(options, actions, contracts, net_cost, T_year
 if st.button("Buscar Estrategia Óptima"):
     with st.spinner("Buscando la estrategia óptima..."):
         all_options = calls + puts
+        st.session_state["optimal_strategy"] = None
         best_prob = 0.0
         best_strategy = None
-        best_net_cost = 0.0
-        best_options = []
-        best_actions = []
-        best_contracts = []
 
-        # Iterate over possible number of options (1 to max_options)
         for num_options in range(1, max_options + 1):
-            # Generate combinations of options
             option_combinations = list(product(all_options, repeat=num_options))
-            # Generate combinations of actions (buy/sell)
             action_combinations = list(product(["buy", "sell"], repeat=num_options))
-            # Generate combinations of contracts (1 to max_contracts_per_option)
             contract_combinations = list(product(range(1, max_contracts_per_option + 1), repeat=num_options))
 
             for options, actions, contracts in product(option_combinations, action_combinations, contract_combinations):
-                # Skip if duplicate options (same strike and type)
                 option_keys = [(opt["strike"], opt["type"]) for opt in options]
                 if len(set(option_keys)) != len(option_keys):
                     continue
 
-                net_cost = calculate_strategy_cost(options, actions, contracts)
-                if net_cost is None:
+                if limit_loss and not has_limited_loss(options, actions, contracts):
+                    logger.debug(f"Skipped strategy: Unlimited loss potential, options={[(opt['symbol'], action, num) for opt, action, num in zip(options, actions, contracts)]}")
                     continue
 
-                # Calibrate IV for this strategy
+                net_cost = calculate_strategy_cost(options, actions, contracts)
+                if net_cost is None or abs(net_cost) > 500000:
+                    logger.debug(f"Skipped strategy: Invalid cost or too large (net_cost={net_cost})")
+                    continue
+
                 raw_net = sum(
                     utils.get_strategy_price(opt, action) * num * 100 * (1 if action == "buy" else -1)
                     for opt, action, num in zip(options, actions, contracts)
                 )
+                if abs(raw_net) < 100:
+                    logger.debug(f"Skipped strategy: Near-zero raw_net ({raw_net})")
+                    continue
+
                 T_years = expiration_days / 365.0
                 iv_calibrated = utils._calibrate_iv(
                     raw_net, current_price, expiration_days,
                     lambda p, t, s: calculate_strategy_value(options, actions, contracts, p, t, s),
                     options, actions
                 )
-                iv_calibrated = max(iv_calibrated, 1e-9)
+                if iv_calibrated < 0.01 or iv_calibrated > 5.0:
+                    logger.debug(f"Skipped strategy: Unrealistic IV ({iv_calibrated}), options={[(opt['symbol'], action) for opt, action in zip(options, actions)]}")
+                    iv_calibrated = 0.30  # Fallback to DEFAULT_IV
 
-                # Estimate probability of P&L >= 0
                 prob = estimate_breakeven_probability(options, actions, contracts, net_cost, T_years, iv_calibrated)
                 if prob >= min_probability and prob > best_prob:
                     best_prob = prob
@@ -160,12 +193,9 @@ if st.button("Buscar Estrategia Óptima"):
                         "actions": actions,
                         "contracts": contracts,
                         "net_cost": net_cost,
-                        "iv": iv_calibrated
+                        "iv": iv_calibrated,
+                        "prob": best_prob
                     }
-                    best_net_cost = net_cost
-                    best_options = options
-                    best_actions = actions
-                    best_contracts = contracts
 
         if best_strategy:
             st.session_state["optimal_strategy"] = best_strategy
@@ -183,6 +213,7 @@ if st.session_state["optimal_strategy"]:
     contracts = strategy["contracts"]
     net_cost = strategy["net_cost"]
     iv_calibrated = strategy["iv"]
+    best_prob = strategy["prob"]
 
     st.subheader("Estrategia Óptima Seleccionada")
     option_details = [
@@ -239,7 +270,6 @@ if st.session_state["optimal_strategy"]:
         )
     ])
 
-    # Add vertical red plane at current price
     y_range = [0, expiration_days]
     z_min, z_max = np.min(Z), np.max(Z)
     X_plane = np.array([[current_price, current_price], [current_price, current_price]])
@@ -257,7 +287,6 @@ if st.session_state["optimal_strategy"]:
         )
     )
 
-    # Add horizontal blue plane at P&L = 0
     x_range = [min_price, max_price]
     X_plane_horizontal = np.array([[x_range[0], x_range[1]], [x_range[0], x_range[1]]])
     Y_plane_horizontal = np.array([[y_range[0], y_range[0]], [y_range[1], y_range[1]]])
@@ -338,7 +367,6 @@ if st.session_state["optimal_strategy"]:
         height=400
     )
 
-    # Add breakeven points
     def find_breakeven(price_range, tolerance=1e-3):
         breakevens = []
         for p in np.linspace(min_price, max_price, 1000):
