@@ -74,13 +74,13 @@ def visualize_callback_call():
     for idx in st.session_state["selected_visualizations_call"]:
         row = edited_df_local.iloc[idx]
         result = {
-            "net_cost": float(row["Net Cost"].replace(",", ".")),
-            "max_profit": float(row["Max Profit"].replace(",", ".")),
-            "max_loss": float(row["Max Loss"].replace(",", ".")),
-            "breakeven": float(row["Breakeven"].replace(",", ".")),
+            "net_cost": float(row["Net Cost"]),
+            "max_profit": float(row["Max Profit"]),
+            "max_loss": float(row["Max Loss"]),
+            "breakeven": float(row["Breakeven"]),
             "strikes": [float(s) for s in row['Strikes'].split('-')],
             "num_contracts": num_contracts,
-            "raw_net": float(row["Net Cost"].replace(",", "."))
+            "raw_net": float(row["Net Cost"])
         }
         long_opt = next((opt for opt in filtered_calls if opt["strike"] == result["strikes"][0]), None)
         short_opt = next((opt for opt in filtered_calls if opt["strike"] == result["strikes"][1]), None)
@@ -98,7 +98,7 @@ def visualize_callback_call():
                 options, actions
             )
             if iv_calibrated == utils.DEFAULT_IV:
-                st.warning(f"No se pudo calibrar la volatilidad implícita para {long_opt['symbol']}/{short_opt['symbol']}. Usando valor predeterminado.")
+                st.warning(f"Volatilidad implícita no calibrada para {long_opt['symbol']}/{short_opt['symbol']}. Usando IV predeterminado ({utils.DEFAULT_IV*100:.1f}%).")
             iv_calibrated = max(iv_calibrated, 1e-9)
 
             # 3D Plot
@@ -153,10 +153,9 @@ def visualize_callback_call():
                         fillcolor="green", opacity=0.1, line_width=0,
                         annotation_text="Rango de Ganancia", annotation_position="top"
                     )
-                st.plotly_chart(fig_2d, use_container_width=True, key=f"bull_call_2d_plot_{idx}_{id(options)}")
+                st.plotly_chart(fig_2d, width='stretch', key=f"bull_call_2d_plot_{idx}_{id(options)}")
         else:
             st.warning("Datos de opciones no disponibles para esta combinación.")
-    st.rerun()
 
 if not detailed_df_call.empty:
     st.session_state["bull_call_df"] = detailed_df_call
@@ -207,13 +206,13 @@ def visualize_callback_put():
     for idx in st.session_state["selected_visualizations_put"]:
         row = edited_df_local.iloc[idx]
         result = {
-            "net_credit": float(row["Net Credit"].replace(",", ".")),
-            "max_profit": float(row["Max Profit"].replace(",", ".")),
-            "max_loss": float(row["Max Loss"].replace(",", ".")),
-            "breakeven": float(row["Breakeven"].replace(",", ".")),
+            "net_credit": float(row["Net Credit"]),
+            "max_profit": float(row["Max Profit"]),
+            "max_loss": float(row["Max Loss"]),
+            "breakeven": float(row["Breakeven"]),
             "strikes": [float(s) for s in row['Strikes'].split('-')],
             "num_contracts": num_contracts,
-            "raw_net": float(row["Net Credit"].replace(",", "."))
+            "raw_net": float(row["Net Credit"])
         }
         long_opt = next((opt for opt in filtered_puts if opt["strike"] == result["strikes"][0]), None)
         short_opt = next((opt for opt in filtered_puts if opt["strike"] == result["strikes"][1]), None)
@@ -231,7 +230,7 @@ def visualize_callback_put():
                 options, actions
             )
             if iv_calibrated == utils.DEFAULT_IV:
-                st.warning(f"No se pudo calibrar la volatilidad implícita para {long_opt['symbol']}/{short_opt['symbol']}. Usando valor predeterminado.")
+                st.warning(f"Volatilidad implícita no calibrada para {long_opt['symbol']}/{short_opt['symbol']}. Usando IV predeterminado ({utils.DEFAULT_IV*100:.1f}%).")
             iv_calibrated = max(iv_calibrated, 1e-9)
 
             # 3D Plot
@@ -286,10 +285,9 @@ def visualize_callback_put():
                         fillcolor="green", opacity=0.1, line_width=0,
                         annotation_text="Rango de Ganancia", annotation_position="top"
                     )
-                st.plotly_chart(fig_2d, use_container_width=True, key=f"bull_put_2d_plot_{idx}_{id(options)}")
+                st.plotly_chart(fig_2d, width='stretch', key=f"bull_put_2d_plot_{idx}_{id(options)}")
         else:
             st.warning("Datos de opciones no disponibles para esta combinación.")
-    st.rerun()
 
 if not detailed_df_put.empty:
     st.session_state["bull_put_df"] = detailed_df_put

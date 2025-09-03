@@ -582,49 +582,66 @@ def calculate_option_iv(S, K, T, r, premium, option_type="call"):
     return None
 # --- Shared Helpers for Viz and Tables ---
 
-def _calibrate_iv(raw_net, current_price, expiration_days, strategy_value_func, options, option_actions, contract_ratios=None):
-    if not options or not option_actions:
-        logger.warning("No options or actions provided for IV calibration")
+logger = logging.getLogger(__name__)
+
+DEFAULT_IV = 0.3  # Default implied volatility (30%)
+
+def _calibrate_iv(target_price, spot, expiration_days, model_func, options, actions, contract_ratios=None):
+    """
+    Calibrate implied volatility for an options strategy to match the target price.
+    
+    Args:
+        target_price (float): Target price to match (e.g., net cost per contract)
+        spot (float): Current spot price of the underlying
+        expiration_days (float): Days to expiration
+        model_func (callable): Function to compute model value given price, time, and IV
+        options (list): List of option dictionaries
+        actions (list): List of actions ("buy" or "sell")
+        contract_ratios (list, optional): Ratios of contracts for each leg
+    Returns:
+        float: Calibrated implied volatility, or DEFAULT_IV if calibration fails
+    """
+    if contract_ratios is None:
+        contract_ratios = [1] * len(options)
+    
+    # Validate inputs
+    if target_price is None or any(opt.get('bid') is None or opt.get('ask') is None for opt in options):
+        logger.warning("Invalid target price or option data. Returning default IV.")
         return DEFAULT_IV
-
-    r = st.session_state.get("risk_free_rate", 0.50)
-    T = max(expiration_days / 365.0, 1e-9)
-    ivs = []
-    weights = contract_ratios if contract_ratios else [1.0] * len(options)
-
-    for opt, action, weight in zip(options, option_actions, weights):
-        premium = get_strategy_price(opt, action)
-        if premium is None or premium <= 0:
-            logger.warning(f"Invalid premium {premium} for option {opt.get('symbol', 'unknown')}, strike={opt['strike']}")
-            continue
-        iv = calculate_option_iv(
-            S=current_price,
-            K=opt["strike"],
-            T=T,
-            r=r,
-            premium=premium,
-            option_type=opt["type"]
-        )
-        if iv and not np.isnan(iv) and iv > 0:
-            ivs.append(iv * weight)
-        else:
-            logger.warning(f"Failed to calculate IV for option {opt.get('symbol', 'unknown')}, strike={opt['strike']}")
-
-    if ivs:
-        total_weight = sum(weights[:len(ivs)])
-        calibrated_iv = sum(ivs) / total_weight if total_weight > 0 else DEFAULT_IV
+    
+    T = expiration_days / 365.0
+    if T <= 0:
+        logger.warning("Expiration time is zero or negative. Returning default IV.")
+        return DEFAULT_IV
+    
+    def objective(sigma):
         try:
-            model_value = strategy_value_func(current_price, T, calibrated_iv)
-            if abs(model_value - raw_net) < raw_net * 0.2:  # Relaxed to 20%
-                return calibrated_iv
-            else:
-                logger.warning(f"IV verification failed: model_value={model_value}, raw_net={raw_net}, tolerance={raw_net * 0.2}")
-                return calibrated_iv  # Use calibrated IV anyway
-        except Exception as e:
-            logger.warning(f"Strategy value error during IV verification: {e}")
-            return calibrated_iv
-    logger.warning("No valid IVs calculated. Using default IV.")
-    return DEFAULT_IV
+            model_value = model_func(spot, T, sigma)
+            return (model_value - target_price) ** 2
+        except (ValueError, OverflowError):
+            return float('inf')
+    
+    # Wider IV search range: 0.01 to 5.0 (1% to 500%)
+    try:
+        result = optimize.minimize_scalar(
+            objective,
+            bounds=(0.01, 5.0),
+            method='bounded',
+            options={'xatol': 1e-6, 'maxiter': 1000}
+        )
+        iv = result.x if result.success else DEFAULT_IV
+    except Exception as e:
+        logger.warning(f"IV calibration failed: {e}. Returning default IV.")
+        return DEFAULT_IV
+    
+    # Verify calibration
+    model_value = model_func(spot, T, iv)
+    tolerance = abs(target_price) * 0.2  # 20% tolerance
+    if abs(model_value - target_price) > tolerance:
+        logger.warning(f"IV verification failed: model_value={model_value}, raw_net={target_price}, tolerance={tolerance}")
+        return DEFAULT_IV
+    
+    return max(iv, 1e-9)  # Ensure non-negative IV
 
 def estimate_breakeven_probability(options, actions, contracts, net_cost, T_years, sigma):
     """
