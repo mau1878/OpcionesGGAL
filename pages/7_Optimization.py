@@ -50,25 +50,25 @@ def has_limited_loss(options, actions, contracts):
     call_positions = {}
     put_positions = {}
     for opt, action, num in zip(options, actions, contracts):
-    strike = opt["strike"]
-    opt_type = opt["type"]
-    multiplier = num if action == "buy" else -num
-    if opt_type == "call":
-    call_positions[strike] = call_positions.get(strike, 0) + multiplier
-    else:
-    put_positions[strike] = put_positions.get(strike, 0) + multiplier
+        strike = opt["strike"]
+        opt_type = opt["type"]
+        multiplier = num if action == "buy" else -num
+        if opt_type == "call":
+            call_positions[strike] = call_positions.get(strike, 0) + multiplier
+        else:
+            put_positions[strike] = put_positions.get(strike, 0) + multiplier
     
     if call_positions:
-    max_strike = max(call_positions.keys())
-    net_call_position = sum(call_positions.values())
-    if call_positions[max_strike] < 0 or (net_call_position < 0 and max(call_positions, key=lambda k: call_positions[k]) == max_strike):
-    return False
+        max_strike = max(call_positions.keys())
+        net_call_position = sum(call_positions.values())
+        if call_positions[max_strike] < 0 or (net_call_position < 0 and max(call_positions, key=lambda k: call_positions[k]) == max_strike):
+            return False
     
     if put_positions:
-    min_strike = min(put_positions.keys())
-    net_put_position = sum(put_positions.values())
-    if put_positions[min_strike] < 0 or (net_put_position < 0 and min(put_positions, key=lambda k: put_positions[k]) == min_strike):
-    return False
+        min_strike = min(put_positions.keys())
+        net_put_position = sum(put_positions.values())
+        if put_positions[min_strike] < 0 or (net_put_position < 0 and min(put_positions, key=lambda k: put_positions[k]) == min_strike):
+            return False
     
     return True
 
@@ -77,14 +77,14 @@ def calculate_strategy_value(options, actions, contracts, price, T, sigma):
     total_value = 0.0
     use_intrinsic = T <= 1e-6
     for opt, action, num in zip(options, actions, contracts):
-    strike = opt["strike"]
-    opt_type = opt["type"]
-    action_mult = 1 if action == "buy" else -1
-    if use_intrinsic:
-    value = intrinsic_value(price, strike, opt_type)
-    else:
-    value = black_scholes(price, strike, T, risk_free_rate, sigma, opt_type)
-    total_value += value * action_mult * num * 100
+        strike = opt["strike"]
+        opt_type = opt["type"]
+        action_mult = 1 if action == "buy" else -1
+        if use_intrinsic:
+            value = intrinsic_value(price, strike, opt_type)
+        else:
+            value = black_scholes(price, strike, T, risk_free_rate, sigma, opt_type)
+        total_value += value * action_mult * num * 100
     return total_value
 
 # Function to estimate breakeven probability
@@ -94,9 +94,9 @@ def estimate_breakeven_probability(current_price, breakeven, expiration_days, iv
     sigma = iv * np.sqrt(T)
     z = (np.log(breakeven / current_price) - mu) / sigma
     if direction == "above":
-    return norm.cdf(z)
+        return norm.cdf(z)
     else:
-    return norm.cdf(-z)
+        return norm.cdf(-z)
 
 # Optimization loop
 all_options = calls + puts
@@ -106,32 +106,32 @@ optimal_strategy = None
 count = 0
 for num_opts in range(1, max_options + 1):
     for combo in product(nearest_options, repeat=num_opts):
-    if count >= max_strategies:
-    break
-    count += 1
-    # Generate possible actions (buy/sell) and contracts (1 to max_contracts_per_option)
-    for action_combo in product(["buy", "sell"], repeat=num_opts):
-    for contract_combo in product(range(1, max_contracts_per_option + 1), repeat=num_opts):
-    options = list(combo)
-    actions = list(action_combo)
-    contracts = list(contract_combo)
-    if limit_loss and not has_limited_loss(options, actions, contracts):
-    continue
-    result = calculate_strategy_cost(options, actions, contracts, commission_rate)
-    if result:
-    result["strikes"] = [o["strike"] for o in options]
-    result["max_profit"] = 10000  # Placeholder; calculate based on strategy
-    result["max_loss"] = result["net_cost"]  # Placeholder
-    result["breakeven"] = current_price + result["net_cost"] / 100  # Placeholder
-    prob = estimate_breakeven_probability(current_price, result["breakeven"], expiration_days, st.session_state.iv)
-    if prob > min_probability and prob > optimal_prob:
-    optimal_prob = prob
-    optimal_strategy = {
-    "options": options,
-    "actions": actions,
-    "contracts": contracts,
-    "result": result
-    }
+        if count >= max_strategies:
+            break
+        count += 1
+        # Generate possible actions (buy/sell) and contracts (1 to max_contracts_per_option)
+        for action_combo in product(["buy", "sell"], repeat=num_opts):
+            for contract_combo in product(range(1, max_contracts_per_option + 1), repeat=num_opts):
+                options = list(combo)
+                actions = list(action_combo)
+                contracts = list(contract_combo)
+                if limit_loss and not has_limited_loss(options, actions, contracts):
+                    continue
+                result = calculate_strategy_cost(options, actions, contracts, commission_rate)
+                if result:
+                    result["strikes"] = [o["strike"] for o in options]
+                    result["max_profit"] = 10000  # Placeholder; calculate based on strategy
+                    result["max_loss"] = result["net_cost"]  # Placeholder
+                    result["breakeven"] = current_price + result["net_cost"] / 100  # Placeholder
+                    prob = estimate_breakeven_probability(current_price, result["breakeven"], expiration_days, st.session_state.iv)
+                    if prob > min_probability and prob > optimal_prob:
+                        optimal_prob = prob
+                        optimal_strategy = {
+                            "options": options,
+                            "actions": actions,
+                            "contracts": contracts,
+                            "result": result
+                        }
 
 if optimal_strategy:
     st.session_state["optimal_strategy"] = optimal_strategy
@@ -142,11 +142,6 @@ if optimal_strategy:
     visualize_neutral_3d(result, current_price, expiration_days, st.session_state.iv, "Optimal Strategy", options, actions)
 else:
     st.warning("No optimal strategy found.")
-
-# ... (truncated 11652 characters)... (rest of the original code with updates)
-# Update plot calls to use visualize_* from viz_utils.py
-# For example:
-fig = _create_3d_figure(X, Y, Z, title, current_price)  # If local, move to viz_utils.py
 
 # Add IV failure warnings
 if st.session_state["iv_failure_count"] > 10:
