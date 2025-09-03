@@ -227,6 +227,8 @@ def visualize_volatility_3d(result, current_price, expiration_days, iv, key, opt
     fig = _create_3d_figure(X, Y, Z, f"3D Payoff for {key} (IV: {iv:.1%})", current_price)
     st.plotly_chart(fig, use_container_width=True, key=key)
 
+logger = logging.getLogger(__name__)
+
 def create_bullish_spread_table(options, calc_func, num_contracts, commission_rate, is_debit=True):
     data = []
     min_strike = st.session_state.current_price * (1 - st.session_state.plot_range_pct)
@@ -244,7 +246,6 @@ def create_bullish_spread_table(options, calc_func, num_contracts, commission_ra
         return pd.DataFrame()
     
     for opt1, opt2 in combinations(filtered_options, 2):
-        # Determine long and short options based on strategy
         if calc_func.__name__ == "calculate_bull_call_spread":
             long_opt, short_opt = (opt1, opt2) if opt1["strike"] < opt2["strike"] else (opt2, opt1)
         else:  # calculate_bull_put_spread
@@ -265,7 +266,7 @@ def create_bullish_spread_table(options, calc_func, num_contracts, commission_ra
     if not df.empty:
         df = df.reset_index()
         df['Strikes'] = df.apply(
-            lambda row: f"{row['level_0']}-{row['level_1']}",
+            lambda row: f"{row['level_0']}-{row['level_1']}" if isinstance(row['level_0'], (int, float)) and isinstance(row['level_1'], (int, float)) else str(row.name),
             axis=1
         )
         df = df.drop(columns=['level_0', 'level_1']).reset_index(drop=True)
@@ -290,7 +291,6 @@ def create_bearish_spread_table(options, calc_func, num_contracts, commission_ra
         return pd.DataFrame()
     
     for opt1, opt2 in combinations(filtered_options, 2):
-        # Determine long and short options based on strategy
         if calc_func.__name__ == "calculate_bear_call_spread":
             short_opt, long_opt = (opt1, opt2) if opt1["strike"] < opt2["strike"] else (opt2, opt1)
         else:  # calculate_bear_put_spread
@@ -306,12 +306,12 @@ def create_bearish_spread_table(options, calc_func, num_contracts, commission_ra
             }
             data.append(((short_opt["strike"], long_opt["strike"]) if calc_func.__name__ == "calculate_bear_call_spread" else (long_opt["strike"], short_opt["strike"]), row))
         else:
-            logger.debug(f"Skipping invalid result for strikes {opt1['strike']}-{opt2['strike']}: {result}")
+            logger.debug(f"Skipping invalid result for strikes {short_opt['strike']}-{long_opt['strike']}: {result}")
     df = pd.DataFrame.from_dict(dict(data), orient='index') if data else pd.DataFrame()
     if not df.empty:
         df = df.reset_index()
         df['Strikes'] = df.apply(
-            lambda row: f"{row['level_0']}-{row['level_1']}",
+            lambda row: f"{row['level_0']}-{row['level_1']}" if isinstance(row['level_0'], (int, float)) and isinstance(row['level_1'], (int, float)) else str(row.name),
             axis=1
         )
         df = df.drop(columns=['level_0', 'level_1']).reset_index(drop=True)

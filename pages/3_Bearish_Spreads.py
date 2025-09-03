@@ -96,37 +96,50 @@ with tab1:
         )
         if selected_option:
             try:
+                logger.debug(f"Selected option: {selected_option}")
                 idx_str, strikes_str = selected_option.split(": ", 1)
                 idx = int(idx_str)
-                strikes = [float(s) for s in strikes_str.split('-')]
-                if len(strikes) != 2:
-                    logger.error(f"Invalid strikes format: {strikes_str}")
-                    st.error("Formato de strikes inválido.")
-                else:
-                    short_strike, long_strike = strikes
-                    logger.debug(f"Visualizing Bear Call Spread for index: {idx}, strikes: {strikes}")
-                    short_opt = next((opt for opt in calls if opt["strike"] == short_strike), None)
-                    long_opt = next((opt for opt in calls if opt["strike"] == long_strike), None)
-                    if short_opt and long_opt:
-                        logger.debug(f"Found options: short={short_opt['strike']}, long={long_opt['strike']}")
-                        result = calculate_bear_call_spread(short_opt, long_opt, num_contracts, commission_rate)
-                        if result:
-                            result["contract_ratios"] = [-1, 1]
-                            visualize_bearish_3d(
-                                result, current_price, expiration_days, st.session_state.iv,
-                                f"Bear Call Spread {strikes_str}",
-                                [short_opt, long_opt], ["sell", "buy"]
-                            )
-                            logger.info(f"3D plot generated for Bear Call Spread {strikes_str}")
+                if idx < len(edited_df):
+                    original_index = edited_df.index[idx]
+                    if isinstance(original_index, tuple) and len(original_index) == 2:
+                        strikes = list(original_index)
+                        if not all(isinstance(s, (int, float)) for s in strikes):
+                            logger.error(f"Invalid strikes in index: {strikes}")
+                            st.error("Formato de strikes inválido en el índice.")
                         else:
-                            st.error("Cálculo inválido para esta combinación.")
-                            logger.error("Invalid calculation for Bear Call Spread")
+                            short_strike, long_strike = strikes  # Correct for Bear Call Spread
+                            logger.debug(f"Parsed strikes from index: short={short_strike}, long={long_strike}")
+                            short_opt = next((opt for opt in calls if opt["strike"] == short_strike), None)
+                            long_opt = next((opt for opt in calls if opt["strike"] == long_strike), None)
+                            if short_opt and long_opt:
+                                logger.debug(f"Found options: short={short_opt['strike']}, long={long_opt['strike']}")
+                                result = calculate_bear_call_spread(short_opt, long_opt, num_contracts, commission_rate)
+                                if result:
+                                    result["contract_ratios"] = [-1, 1]
+                                    visualize_bearish_3d(
+                                        result, current_price, expiration_days, st.session_state.iv,
+                                        f"Bear Call Spread {short_strike}-{long_strike}",
+                                        [short_opt, long_opt], ["sell", "buy"]
+                                    )
+                                    logger.info(f"3D plot generated for Bear Call Spread {short_strike}-{long_strike}")
+                                else:
+                                    st.error("Cálculo inválido para esta combinación.")
+                                    logger.error("Invalid calculation for Bear Call Spread")
+                            else:
+                                st.error("Datos de opciones no disponibles para esta combinación.")
+                                logger.error(f"Options not found: short={short_opt}, long={long_opt}")
                     else:
-                        st.error("Datos de opciones no disponibles para esta combinación.")
-                        logger.error(f"Options not found: short={short_opt}, long={long_opt}")
+                        logger.error(f"Invalid index format at idx {idx}: {original_index}")
+                        st.error("Índice inválido para esta selección.")
+                else:
+                    logger.error(f"Index {idx} out of range for DataFrame length {len(edited_df)}")
+                    st.error("Índice fuera de rango.")
             except ValueError as e:
                 st.error(f"Error al procesar los strikes: {e}")
                 logger.error(f"Error parsing strikes {selected_option}: {e}")
+            except Exception as e:
+                st.error(f"Error inesperado: {e}")
+                logger.error(f"Unexpected error in selectbox handling: {e}")
 
     else:
         st.warning("No hay datos disponibles para Bear Call Spread. Asegúrese de que hay suficientes opciones call en el rango seleccionado o intente actualizar los datos.")
@@ -205,40 +218,43 @@ with tab2:
         if selected_option:
             try:
                 logger.debug(f"Selected option: {selected_option}")
-                idx_str, strikes_str = selected_option.split(": ", 1)  # Split on ": " (space after colon)
+                idx_str, strikes_str = selected_option.split(": ", 1)
                 idx = int(idx_str)
-                # Handle extra spaces and ensure two strikes
-                strikes_parts = [s.strip() for s in strikes_str.split('-')]
-                if len(strikes_parts) != 2 or not all(p.replace('.', '').isdigit() for p in strikes_parts):
-                    logger.error(f"Invalid strikes format: {strikes_str}")
-                    st.error("Formato de strikes inválido. Asegúrese de que el formato sea 'strike1-strike2'.")
-                else:
-                    strikes = [float(s) for s in strikes_parts]
-                    # Proceed with visualization (example for Bear Call Spread)
-                    short_strike, long_strike = strikes if calc_func.__name__ == "calculate_bear_call_spread" else (strikes[1], strikes[0])  # Adjust based on strategy
-                    logger.debug(f"Parsed strikes: short={short_strike}, long={long_strike}")
-                    short_opt = next((opt for opt in options if opt["strike"] == short_strike), None)
-                    long_opt = next((opt for opt in options if opt["strike"] == long_strike), None)
-                    if short_opt and long_opt:
-                        logger.debug(f"Found options: short={short_opt['strike']}, long={long_opt['strike']}")
-                        result = calc_func(short_opt, long_opt, num_contracts, commission_rate)
-                        if result:
-                            contract_ratios = [-1, 1] if "bear" in calc_func.__name__ else [1, -1]  # Adjust based on strategy
-                            result["contract_ratios"] = contract_ratios
-                            viz_func = visualize_bearish_3d if "bear" in calc_func.__name__ else visualize_bullish_3d
-                            actions = ["sell", "buy"] if "bear" in calc_func.__name__ else ["buy", "sell"]
-                            viz_func(
-                                result, current_price, expiration_days, st.session_state.iv,
-                                f"{calc_func.__name__.replace('calculate_', '').replace('_spread', ' Spread')} {strikes_str}",
-                                [short_opt, long_opt], actions
-                            )
-                            logger.info(f"3D plot generated for {calc_func.__name__.replace('calculate_', '').replace('_spread', ' Spread')} {strikes_str}")
+                if idx < len(edited_df):
+                    original_index = edited_df.index[idx]
+                    if isinstance(original_index, tuple) and len(original_index) == 2:
+                        strikes = list(original_index)
+                        if not all(isinstance(s, (int, float)) for s in strikes):
+                            logger.error(f"Invalid strikes in index: {strikes}")
+                            st.error("Formato de strikes inválido en el índice.")
                         else:
-                            st.error("Cálculo inválido para esta combinación.")
-                            logger.error("Invalid calculation for spread")
+                            short_strike, long_strike = strikes  # Correct for Bear Call Spread
+                            logger.debug(f"Parsed strikes from index: short={short_strike}, long={long_strike}")
+                            short_opt = next((opt for opt in calls if opt["strike"] == short_strike), None)
+                            long_opt = next((opt for opt in calls if opt["strike"] == long_strike), None)
+                            if short_opt and long_opt:
+                                logger.debug(f"Found options: short={short_opt['strike']}, long={long_opt['strike']}")
+                                result = calculate_bear_call_spread(short_opt, long_opt, num_contracts, commission_rate)
+                                if result:
+                                    result["contract_ratios"] = [-1, 1]
+                                    visualize_bearish_3d(
+                                        result, current_price, expiration_days, st.session_state.iv,
+                                        f"Bear Call Spread {short_strike}-{long_strike}",
+                                        [short_opt, long_opt], ["sell", "buy"]
+                                    )
+                                    logger.info(f"3D plot generated for Bear Call Spread {short_strike}-{long_strike}")
+                                else:
+                                    st.error("Cálculo inválido para esta combinación.")
+                                    logger.error("Invalid calculation for Bear Call Spread")
+                            else:
+                                st.error("Datos de opciones no disponibles para esta combinación.")
+                                logger.error(f"Options not found: short={short_opt}, long={long_opt}")
                     else:
-                        st.error("Datos de opciones no disponibles para esta combinación.")
-                        logger.error(f"Options not found: short={short_opt}, long={long_opt}")
+                        logger.error(f"Invalid index format at idx {idx}: {original_index}")
+                        st.error("Índice inválido para esta selección.")
+                else:
+                    logger.error(f"Index {idx} out of range for DataFrame length {len(edited_df)}")
+                    st.error("Índice fuera de rango.")
             except ValueError as e:
                 st.error(f"Error al procesar los strikes: {e}")
                 logger.error(f"Error parsing strikes {selected_option}: {e}")
