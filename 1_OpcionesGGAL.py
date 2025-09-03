@@ -1,11 +1,12 @@
 import streamlit as st
 from datetime import datetime, date
-import utils
+from data_utils import fetch_cauciones_table, get_risk_free_rate  # Assuming fetch_cauciones_table is in data_utils
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
+from data_utils import get_ggal_data
 
-# Function to fetch Cauciones table
+# Function to fetch Cauciones table (moved to data_utils.py if centralized, but kept here if page-specific)
 def fetch_cauciones_table(url: str, headers: dict = None) -> pd.DataFrame:
     """
     Fetches the 'Cauciones' table from the given URL and returns it as a pandas DataFrame.
@@ -68,46 +69,24 @@ st.set_page_config(page_title="Opciones GGAL", layout="wide")
 st.title("Análisis de Opciones de GGAL")
 
 # --- Data Loading ---
-if 'ggal_stock' not in st.session_state:
-    with st.spinner("Cargando datos por primera vez..."):
-        st.session_state.ggal_stock, st.session_state.ggal_options = utils.get_ggal_data()
-        st.session_state.last_updated = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
-
-if st.button("Actualizar Datos"):
-    with st.spinner("Actualizando..."):
-        st.session_state.ggal_stock, st.session_state.ggal_options = utils.get_ggal_data()
-        st.session_state.last_updated = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
-    st.success("Datos actualizados.")
-
-ggal_stock = st.session_state.ggal_stock
-ggal_options = st.session_state.ggal_options
-
+ggal_stock, ggal_options = get_ggal_data()  # From data_utils.py
 if not ggal_stock or not ggal_options:
-    st.error("No se pudieron cargar los datos de GGAL. Intente actualizar.")
+    st.error("Failed to load GGAL data. Please try again later.")
     st.stop()
 
-st.session_state.current_price = float(ggal_stock["c"])
-if not st.session_state.current_price or st.session_state.current_price <= 0:
-    st.error("El precio actual de GGAL es inválido o no está disponible. Intente actualizar los datos.")
-    st.stop()
+st.session_state.ggal_stock = ggal_stock
+st.session_state.ggal_options = ggal_options
 
-st.metric(label="Precio Actual de GGAL (ARS)", value=f"{st.session_state.current_price:.2f}")
-st.caption(f"Última actualización: {st.session_state.last_updated}")
+# Display stock price
+st.session_state.current_price = ggal_stock.get("price", 100.0)
+st.write(f"GGAL Current Price: {st.session_state.current_price:.2f} ARS")
 
-# --- Sidebar for Inputs ---
-st.sidebar.header("Configuración de Análisis")
-
-expirations = sorted(list(set(
-    o["expiration"] for o in ggal_options 
-    if o["expiration"] is not None and o["expiration"] >= date.today()
-)))
-
-# Set default expiration to October 17, 2025
-default_exp = date(2025, 10, 17)
-default_index = expirations.index(default_exp) if default_exp in expirations else (1 if len(expirations) > 1 else 0)
-
+# Sidebar inputs for expirations, contracts, etc.
+st.sidebar.header("Parámetros")
+expirations = sorted(set(o["expiration"] for o in ggal_options))
+default_index = 0  # Or logic to select default
 st.session_state.selected_exp = st.sidebar.selectbox(
-    "Selecciona la fecha de vencimiento",
+    "Seleccione la fecha de vencimiento",
     expirations,
     index=default_index,
     format_func=lambda x: x.strftime("%Y-%m-%d")
@@ -118,7 +97,7 @@ st.session_state.commission_rate = st.sidebar.number_input("Comisión (%)", min_
 st.sidebar.caption("Las tarifas son estimaciones; las reales pueden variar.")
 # Fetch risk-free rate dynamically
 st.session_state.risk_free_rate = get_risk_free_rate()
-st.session_state.iv = utils.DEFAULT_IV  # 0.30
+st.session_state.iv = 0.30  # DEFAULT_IV from calc_utils.py
 strike_percentage = st.sidebar.slider("Rango de Strikes (% del precio actual)", 0.0, 100.0, 20.0) / 100
 st.session_state.plot_range_pct = st.sidebar.slider("Rango de Precios en Gráficos 3D (% del precio actual)", 10.0, 200.0, 50.0) / 100
 

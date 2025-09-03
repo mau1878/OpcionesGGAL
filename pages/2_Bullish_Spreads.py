@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-import utils
+from calc_utils import calculate_bull_call_spread, calculate_bull_put_spread
+from viz_utils import create_bullish_spread_table, create_spread_matrix, visualize_bullish_3d
 import logging
 
 logger = logging.getLogger(__name__)
@@ -23,8 +24,8 @@ with tab1:
     st.header("Bull Call Spread (Débito)")
     st.subheader("Análisis Detallado por Ratio")
     try:
-        detailed_df_call = utils.create_bullish_spread_table(
-            calls, utils.calculate_bull_call_spread, st.session_state.num_contracts,
+        detailed_df_call = create_bullish_spread_table(
+            calls, calculate_bull_call_spread, st.session_state.num_contracts,
             st.session_state.commission_rate, is_debit=True
         )
     except Exception as e:
@@ -76,28 +77,22 @@ with tab1:
                 if isinstance(idx, int) and 0 <= idx < len(edited_df_local):
                     row = edited_df_local.iloc[idx]
                     visualize_state = edited_rows[idx].get('Visualize', False)
-                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}")
+                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}, row.name={row.name}, Strikes={row['Strikes']}")
                     if visualize_state:
                         logger.info(f"Visualizing row {idx}: {row}")
-                        if "Net Cost" not in row:
-                            logger.error(f"Missing 'Net Cost' column for row {idx}. Available columns: {row.index.tolist()}")
-                            st.error(f"Data mismatch: 'Net Cost' not found in row {idx}. Check DataFrame structure.")
+                        result = row.to_dict()
+                        # Use Strikes column instead of row.name
+                        strikes = [float(s) for s in row['Strikes'].split('-')]
+                        if len(strikes) != 2:
+                            logger.error(f"Invalid strikes format for row {idx}: {row['Strikes']}")
+                            st.error("Invalid strikes format.")
                             continue
-                        result = {
-                            "net_cost": float(row["Net Cost"].replace(",", ".")),
-                            "max_profit": float(row["Max Profit"].replace(",", ".")),
-                            "max_loss": float(row["Max Loss"].replace(",", ".")),
-                            "breakeven": float(row["Breakeven"].replace(",", ".")),
-                            "strikes": [float(s) for s in row['Strikes'].split('-')],
-                            "num_contracts": st.session_state.num_contracts,
-                            "raw_net": float(row["Net Cost"].replace(",", "."))
-                        }
-                        long_opt = next((opt for opt in calls if opt["strike"] == result["strikes"][0]), None)
-                        short_opt = next((opt for opt in calls if opt["strike"] == result["strikes"][1]), None)
+                        long_opt = next((opt for opt in calls if opt["strike"] == strikes[0]), None)
+                        short_opt = next((opt for opt in calls if opt["strike"] == strikes[1]), None)
                         logger.info(f"Options found: long={long_opt}, short={short_opt}")
-                        if long_opt and short_opt:
+                        if result and long_opt and short_opt:
                             try:
-                                utils.visualize_bullish_3d(
+                                visualize_bullish_3d(
                                     result, st.session_state.current_price, st.session_state.expiration_days,
                                     st.session_state.iv, "Bull Call Spread",
                                     options=[long_opt, short_opt], option_actions=["buy", "sell"]
@@ -111,11 +106,7 @@ with tab1:
                             st.warning("Datos de opciones no disponibles para esta combinación.")
                         # Reset the checkbox via separate state
                         st.session_state["visualize_flags_call"][idx] = False
-                        try:
-                            st.rerun()  # Use st.rerun() instead of experimental_rerun
-                        except AttributeError:
-                            logger.error("st.rerun() not available, please update Streamlit")
-                            st.error("Error: Please update Streamlit to version 1.30.0 or later.")
+                        st.rerun()
 
         # Sync visualize flags to DataFrame
         for idx in range(len(edited_df)):
@@ -146,12 +137,12 @@ with tab1:
 
     st.subheader("Matriz de Costo Neto (Compra en Fila, Venta en Columna)")
     try:
-        profit_df, _, _, _ = utils.create_spread_matrix(
-            calls, utils.calculate_bull_call_spread, st.session_state.num_contracts,
+        profit_df, _, _, _ = create_spread_matrix(
+            calls, calculate_bull_call_spread, st.session_state.num_contracts,
             st.session_state.commission_rate, True
         )
         if not profit_df.empty:
-            st.dataframe(profit_df.style.format("{:.2f}").background_gradient(cmap='viridis_r', subset=profit_df.columns[profit_df.notna().any()]))
+            st.dataframe(profit_df.style.format("{:.2f}").background_gradient(cmap='viridis_r'))
         else:
             st.warning("No hay datos disponibles para la matriz de costos.")
             logger.warning("Empty profit_df for Bull Call Spread matrix.")
@@ -163,8 +154,8 @@ with tab2:
     st.header("Bull Put Spread (Crédito)")
     st.subheader("Análisis Detallado por Ratio")
     try:
-        detailed_df_put = utils.create_bullish_spread_table(
-            puts, utils.calculate_bull_put_spread, st.session_state.num_contracts,
+        detailed_df_put = create_bullish_spread_table(
+            puts, calculate_bull_put_spread, st.session_state.num_contracts,
             st.session_state.commission_rate, is_debit=False
         )
     except Exception as e:
@@ -182,7 +173,6 @@ with tab2:
         # Convert MultiIndex to a simple index
         if isinstance(edited_df.index, pd.MultiIndex):
             edited_df = edited_df.reset_index()
-            # Join the MultiIndex levels into a Strikes column
             edited_df['Strikes'] = edited_df.apply(
                 lambda row: f"{row['level_0']}-{row['level_1']}" if 'level_1' in row else str(row['level_0']),
                 axis=1
@@ -191,12 +181,6 @@ with tab2:
 
         # Add a visualization column
         edited_df['Visualize'] = False
-
-        # Store DataFrame in session state
-        if "bull_put_df" not in st.session_state:
-            st.session_state["bull_put_df"] = edited_df.copy()
-        else:
-            st.session_state["bull_put_df"] = edited_df
 
         # Initialize separate state for visualize flags
         if "visualize_flags_put" not in st.session_state:
@@ -209,35 +193,26 @@ with tab2:
             logger.info(f"Edited state: {edited}")
             edited_rows = edited.get('edited_rows', {})
             logger.info(f"Edited rows: {edited_rows}")
-            # Use stored DataFrame
-            edited_df_local = st.session_state["bull_put_df"]
-            logger.info(f"Using DataFrame with id: {id(edited_df_local)}, Columns: {edited_df_local.columns.tolist()}")
+            edited_df_local = st.session_state["bull_put_df"] if "bull_put_df" in st.session_state else edited_df
             for idx in edited_rows:
                 if isinstance(idx, int) and 0 <= idx < len(edited_df_local):
                     row = edited_df_local.iloc[idx]
                     visualize_state = edited_rows[idx].get('Visualize', False)
-                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}")
+                    logger.info(f"Row idx: {idx}, Visualize state: {visualize_state}, row.name={row.name}, Strikes={row['Strikes']}")
                     if visualize_state:
                         logger.info(f"Visualizing row {idx}: {row}")
-                        if "Net Credit" not in row:
-                            logger.error(f"Missing 'Net Credit' column for row {idx}. Available columns: {row.index.tolist()}")
-                            st.error(f"Data mismatch: 'Net Credit' not found in row {idx}. Check DataFrame structure.")
+                        result = row.to_dict()
+                        strikes = [float(s) for s in row['Strikes'].split('-')]
+                        if len(strikes) != 2:
+                            logger.error(f"Invalid strikes format for row {idx}: {row['Strikes']}")
+                            st.error("Invalid strikes format.")
                             continue
-                        result = {
-                            "net_cost": -float(row["Net Credit"].replace(",", ".")),
-                            "max_profit": float(row["Max Profit"].replace(",", ".")),
-                            "max_loss": float(row["Max Loss"].replace(",", ".")),
-                            "breakeven": float(row["Breakeven"].replace(",", ".")),
-                            "strikes": [float(s) for s in row['Strikes'].split('-')],
-                            "num_contracts": st.session_state.num_contracts,
-                            "raw_net": -float(row["Net Credit"].replace(",", "."))
-                        }
-                        short_opt = next((opt for opt in puts if opt["strike"] == result["strikes"][1]), None)
-                        long_opt = next((opt for opt in puts if opt["strike"] == result["strikes"][0]), None)
-                        logger.info(f"Options found: short={short_opt}, long={long_opt}")
-                        if short_opt and long_opt:
+                        long_opt = next((opt for opt in puts if opt["strike"] == strikes[1]), None)
+                        short_opt = next((opt for opt in puts if opt["strike"] == strikes[0]), None)
+                        logger.info(f"Options found: long={long_opt}, short={short_opt}")
+                        if result and long_opt and short_opt:
                             try:
-                                utils.visualize_bullish_3d(
+                                visualize_bullish_3d(
                                     result, st.session_state.current_price, st.session_state.expiration_days,
                                     st.session_state.iv, "Bull Put Spread",
                                     options=[short_opt, long_opt], option_actions=["sell", "buy"]
@@ -252,7 +227,7 @@ with tab2:
                         # Reset the checkbox via separate state
                         st.session_state["visualize_flags_put"][idx] = False
                         try:
-                            st.rerun()  # Use st.rerun() instead of experimental_rerun
+                            st.rerun()
                         except AttributeError:
                             logger.error("st.rerun() not available, please update Streamlit")
                             st.error("Error: Please update Streamlit to version 1.30.0 or later.")
@@ -286,8 +261,8 @@ with tab2:
 
     st.subheader("Matriz de Crédito Neto (Venta en Fila, Compra en Columna)")
     try:
-        profit_df, _, _, _ = utils.create_spread_matrix(
-            puts, utils.calculate_bull_put_spread, st.session_state.num_contracts,
+        profit_df, _, _, _ = create_spread_matrix(
+            puts, calculate_bull_put_spread, st.session_state.num_contracts,
             st.session_state.commission_rate, False
         )
         if not profit_df.empty:

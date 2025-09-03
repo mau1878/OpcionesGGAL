@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-import utils
+from calc_utils import calculate_bear_call_spread, calculate_bear_put_spread
+from viz_utils import create_bearish_spread_table, create_spread_matrix, visualize_bearish_3d
 import logging
 
 logger = logging.getLogger(__name__)
@@ -23,8 +24,8 @@ with tab1:
     st.header("Bear Call Spread (Crédito)")
     st.subheader("Análisis Detallado por Ratio")
     try:
-        detailed_df_call = utils.create_bearish_spread_table(
-            calls, utils.calculate_bear_call_spread, st.session_state.num_contracts,
+        detailed_df_call = create_bearish_spread_table(
+            calls, calculate_bear_call_spread, st.session_state.num_contracts,
             st.session_state.commission_rate, is_debit=False
         )
     except Exception as e:
@@ -69,24 +70,20 @@ with tab1:
                     if visualize_state:
                         logger.info(f"Visualizing row {idx}: {row}")
                         result = row.to_dict()
-                        # Use Strikes column instead of row.name
                         strikes = [float(s) for s in row['Strikes'].split('-')]
                         if len(strikes) != 2:
-                            logger.error(f"Invalid strike pair: {row['Strikes']}")
-                            st.error(f"Invalid strike pair: {row['Strikes']}")
+                            logger.error(f"Invalid strikes format for row {idx}: {row['Strikes']}")
+                            st.error("Invalid strikes format.")
                             continue
-                        result["strikes"] = strikes
-                        result["num_contracts"] = st.session_state.num_contracts
-                        result["raw_net"] = -float(result.get("Net Credit", 0))
-                        result["net_cost"] = -float(result.get("Net Credit", 0))
                         short_opt = next((opt for opt in calls if opt["strike"] == strikes[0]), None)
                         long_opt = next((opt for opt in calls if opt["strike"] == strikes[1]), None)
                         logger.info(f"Options found: short={short_opt}, long={long_opt}")
                         if result and short_opt and long_opt:
                             try:
-                                utils.visualize_bearish_3d(
-                                    result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
-                                    "Bear Call Spread", options=[short_opt, long_opt], option_actions=["sell", "buy"]
+                                visualize_bearish_3d(
+                                    result, st.session_state.current_price, st.session_state.expiration_days,
+                                    st.session_state.iv, "Bear Call Spread",
+                                    options=[short_opt, long_opt], option_actions=["sell", "buy"]
                                 )
                                 logger.info("3D plot triggered successfully for Bear Call Spread")
                             except Exception as e:
@@ -128,8 +125,8 @@ with tab1:
 
     st.subheader("Matriz de Crédito Neto (Venta en Fila, Compra en Columna)")
     try:
-        profit_df, _, _, _ = utils.create_spread_matrix(
-            calls, utils.calculate_bear_call_spread, st.session_state.num_contracts,
+        profit_df, _, _, _ = create_spread_matrix(
+            calls, calculate_bear_call_spread, st.session_state.num_contracts,
             st.session_state.commission_rate, False
         )
         if not profit_df.empty:
@@ -145,8 +142,8 @@ with tab2:
     st.header("Bear Put Spread (Débito)")
     st.subheader("Análisis Detallado por Ratio")
     try:
-        detailed_df_put = utils.create_bearish_spread_table(
-            puts, utils.calculate_bear_put_spread, st.session_state.num_contracts,
+        detailed_df_put = create_bearish_spread_table(
+            puts, calculate_bear_put_spread, st.session_state.num_contracts,
             st.session_state.commission_rate, is_debit=True
         )
     except Exception as e:
@@ -164,7 +161,6 @@ with tab2:
         # Convert MultiIndex to a simple index
         if isinstance(edited_df.index, pd.MultiIndex):
             edited_df = edited_df.reset_index()
-            # Join the MultiIndex levels into a Strikes column
             edited_df['Strikes'] = edited_df.apply(
                 lambda row: f"{row['level_0']}-{row['level_1']}" if 'level_1' in row else str(row['level_0']),
                 axis=1
@@ -192,22 +188,17 @@ with tab2:
                     if visualize_state:
                         logger.info(f"Visualizing row {idx}: {row}")
                         result = row.to_dict()
-                        # Use Strikes column instead of row.name
                         strikes = [float(s) for s in row['Strikes'].split('-')]
                         if len(strikes) != 2:
-                            logger.error(f"Invalid strike pair: {row['Strikes']}")
-                            st.error(f"Invalid strike pair: {row['Strikes']}")
+                            logger.error(f"Invalid strikes format for row {idx}: {row['Strikes']}")
+                            st.error("Invalid strikes format.")
                             continue
-                        result["strikes"] = strikes
-                        result["num_contracts"] = st.session_state.num_contracts
-                        result["raw_net"] = float(result.get("Net Cost", 0))
-                        result["net_cost"] = float(result.get("Net Cost", 0))
-                        long_opt = next((opt for opt in puts if opt["strike"] == strikes[1]), None)
                         short_opt = next((opt for opt in puts if opt["strike"] == strikes[0]), None)
-                        logger.info(f"Options found: long={long_opt}, short={short_opt}")
-                        if result and long_opt and short_opt:
+                        long_opt = next((opt for opt in puts if opt["strike"] == strikes[1]), None)
+                        logger.info(f"Options found: short={short_opt}, long={long_opt}")
+                        if result and short_opt and long_opt:
                             try:
-                                utils.visualize_bearish_3d(
+                                visualize_bearish_3d(
                                     result, st.session_state.current_price, st.session_state.expiration_days, st.session_state.iv,
                                     "Bear Put Spread", options=[long_opt, short_opt], option_actions=["buy", "sell"]
                                 )
@@ -251,8 +242,8 @@ with tab2:
 
     st.subheader("Matriz de Costo Neto (Compra en Fila, Venta en Columna)")
     try:
-        profit_df, _, _, _ = utils.create_spread_matrix(
-            puts, utils.calculate_bear_put_spread, st.session_state.num_contracts,
+        profit_df, _, _, _ = create_spread_matrix(
+            puts, calculate_bear_put_spread, st.session_state.num_contracts,
             st.session_state.commission_rate, True
         )
         if not profit_df.empty:
