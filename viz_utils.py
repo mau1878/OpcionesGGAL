@@ -99,7 +99,7 @@ def visualize_bullish_3d(result, current_price, expiration_days, iv, key, option
                         black_scholes(price, k1, T, r, sigma, "put"))
         return 0.0
     
-    iv = _calibrate_iv(raw_net, current_price, expiration_days, strategy_value, options, option_actions)
+    iv = _calculate_iv(raw_net, current_price, expiration_days, strategy_value, options, option_actions)
     iv = max(iv, 1e-9)
     if iv < 1e-6:
         st.warning(f"IV calibration failed for {key}; using fallback value. Plots may be inaccurate.")
@@ -138,7 +138,7 @@ def visualize_bearish_3d(result, current_price, expiration_days, iv, key, option
                         black_scholes(price, k1, T, r, sigma, "put"))
         return 0.0
     
-    iv = _calibrate_iv(raw_net, current_price, expiration_days, strategy_value, options, option_actions)
+    iv = _calculate_iv(raw_net, current_price, expiration_days, strategy_value, options, option_actions)
     iv = max(iv, 1e-9)
     if iv < 1e-6:
         st.warning(f"IV calibration failed for {key}; using fallback value. Plots may be inaccurate.")
@@ -170,7 +170,7 @@ def visualize_neutral_3d(result, current_price, expiration_days, iv, key, option
             vals = [black_scholes(price, k, T, r, sigma, opt_type) for k in strikes]
         return sum(r * v for r, v in zip(ratios, vals)) * 100 * num_contracts
     
-    iv = _calibrate_iv(raw_net, current_price, expiration_days, strategy_value, options, option_actions, contract_ratios=ratios)
+    iv = _calculate_iv(raw_net, current_price, expiration_days, strategy_value, options, option_actions, contract_ratios=ratios)
     iv = max(iv, 1e-9)
     if iv < 1e-6:
         st.warning(f"IV calibration failed for {key}; using fallback value. Plots may be inaccurate.")
@@ -213,7 +213,7 @@ def visualize_volatility_3d(result, current_price, expiration_days, iv, key, opt
             return (call_val + put_val) * 100 * num_contracts
         return 0.0
     
-    iv = _calibrate_iv(raw_net, current_price, expiration_days, strategy_value, options, option_actions)
+    iv = _calculate_iv(raw_net, current_price, expiration_days, strategy_value, options, option_actions)
     iv = max(iv, 1e-9)
     if iv < 1e-6:
         st.warning(f"IV calibration failed for {key}; using fallback value. Plots may be inaccurate.")
