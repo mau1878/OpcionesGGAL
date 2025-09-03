@@ -586,6 +586,33 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_IV = 0.3  # Default implied volatility (30%)
 
+def calculate_strategy_cost(options, actions, contracts, commission_rate=None):
+    """
+    Calculate the net cost of an options strategy.
+    
+    Args:
+        options (list): List of option dictionaries with 'bid' and 'ask' prices
+        actions (list): List of actions ("buy" or "sell")
+        contracts (list): List of contract quantities
+        commission_rate (float, optional): Commission rate per contract
+    Returns:
+        float: Net cost of the strategy (positive for debit, negative for credit), or None if invalid
+    """
+    if commission_rate is None:
+        commission_rate = st.session_state.get('commission_rate', 0.0)
+    total_cost = 0.0
+    for opt, action, num_contracts in zip(options, actions, contracts):
+        bid = opt.get('bid')
+        ask = opt.get('ask')
+        if bid is None or ask is None or bid < 0 or ask < 0 or bid > ask:
+            logger.warning(f"Invalid bid/ask for option {opt.get('symbol', 'unknown')}: bid={bid}, ask={ask}")
+            return None
+        price = ask if action == "buy" else bid
+        multiplier = 1 if action == "buy" else -1
+        total_cost += price * num_contracts * 100 * multiplier
+        total_cost += commission_rate * num_contracts
+    return total_cost
+
 def _calibrate_iv(target_price, spot, expiration_days, model_func, options, actions, contract_ratios=None):
     """
     Calibrate implied volatility for an options strategy to match the target price.
@@ -605,13 +632,14 @@ def _calibrate_iv(target_price, spot, expiration_days, model_func, options, acti
         contract_ratios = [1] * len(options)
     
     # Validate inputs
-    if target_price is None or any(opt.get('bid') is None or opt.get('ask') is None for opt in options):
-        logger.warning("Invalid target price or option data. Returning default IV.")
+    option_symbols = [opt.get('symbol', 'unknown') for opt in options]
+    if target_price is None or target_price == 0 or any(opt.get('bid') is None or opt.get('ask') is None or opt.get('bid') < 0 or opt.get('ask') < 0 or opt.get('bid') > opt.get('ask') for opt in options):
+        logger.warning(f"Invalid target price ({target_price}) or option data for {', '.join(option_symbols)}. Returning default IV.")
         return DEFAULT_IV
     
     T = expiration_days / 365.0
     if T <= 0:
-        logger.warning("Expiration time is zero or negative. Returning default IV.")
+        logger.warning(f"Invalid expiration time ({expiration_days} days) for {', '.join(option_symbols)}. Returning default IV.")
         return DEFAULT_IV
     
     def objective(sigma):
@@ -631,14 +659,14 @@ def _calibrate_iv(target_price, spot, expiration_days, model_func, options, acti
         )
         iv = result.x if result.success else DEFAULT_IV
     except Exception as e:
-        logger.warning(f"IV calibration failed: {e}. Returning default IV.")
+        logger.warning(f"IV calibration failed for {', '.join(option_symbols)}: {e}. Returning default IV.")
         return DEFAULT_IV
     
     # Verify calibration
     model_value = model_func(spot, T, iv)
     tolerance = abs(target_price) * 0.2  # 20% tolerance
     if abs(model_value - target_price) > tolerance:
-        logger.warning(f"IV verification failed: model_value={model_value}, raw_net={target_price}, tolerance={tolerance}")
+        logger.warning(f"IV verification failed for {', '.join(option_symbols)}: model_value={model_value}, raw_net={target_price}, tolerance={tolerance}")
         return DEFAULT_IV
     
     return max(iv, 1e-9)  # Ensure non-negative IV
@@ -727,31 +755,7 @@ def calculate_strategy_value(options, actions, contracts, price, t, sigma):
         total_value += value * num_contracts * 100 * multiplier
     return total_value
 
-def calculate_strategy_cost(options, actions, contracts, commission_rate=None):
-    """
-    Calculate the net cost of an options strategy.
-    
-    Args:
-        options (list): List of option dictionaries with 'bid' and 'ask' prices
-        actions (list): List of actions ("buy" or "sell")
-        contracts (list): List of contract quantities
-        commission_rate (float, optional): Commission rate per contract
-    Returns:
-        float: Net cost of the strategy (positive for debit, negative for credit), or None if invalid
-    """
-    if commission_rate is None:
-        commission_rate = st.session_state.get('commission_rate', 0.0)
-    total_cost = 0.0
-    for opt, action, num_contracts in zip(options, actions, contracts):
-        if 'bid' not in opt or 'ask' not in opt:
-            return None
-        price = opt['ask'] if action == "buy" else opt['bid']
-        if price is None:
-            return None
-        multiplier = 1 if action == "buy" else -1
-        total_cost += price * num_contracts * 100 * multiplier
-        total_cost += commission_rate * num_contracts
-    return total_cost
+
 
 def has_limited_loss(options, actions, contracts):
     """
