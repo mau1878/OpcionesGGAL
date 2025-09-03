@@ -160,12 +160,11 @@ def visualize_callback_call():
 
 if not detailed_df_call.empty:
     st.session_state["bull_call_df"] = detailed_df_call
-    edited_df = detailed_df_call.copy()
-    # Keep numeric columns as floats, use column_config for formatting
+    edited_df = detailed_df_call.reset_index()  # Reset MultiIndex to columns
     edited_df["Visualize"] = False
     edited_df = st.data_editor(
         edited_df,
-        use_container_width=True,
+        width='stretch',
         column_config={
             "Long Strike": st.column_config.NumberColumn("Long Strike", format="%.2f"),
             "Short Strike": st.column_config.NumberColumn("Short Strike", format="%.2f"),
@@ -294,11 +293,11 @@ def visualize_callback_put():
 
 if not detailed_df_put.empty:
     st.session_state["bull_put_df"] = detailed_df_put
-    edited_df = detailed_df_put.copy()
+    edited_df = detailed_df_put.reset_index()  # Reset MultiIndex to columns
     edited_df["Visualize"] = False
     edited_df = st.data_editor(
         edited_df,
-        use_container_width=True,
+        width='stretch',
         column_config={
             "Long Strike": st.column_config.NumberColumn("Long Strike", format="%.2f"),
             "Short Strike": st.column_config.NumberColumn("Short Strike", format="%.2f"),

@@ -160,11 +160,11 @@ def visualize_callback_bear_call():
 
 if not detailed_df_bear_call.empty:
     st.session_state["bear_call_df"] = detailed_df_bear_call
-    edited_df = detailed_df_bear_call.copy()
+    edited_df = detailed_df_bear_call.reset_index()  # Reset MultiIndex to columns
     edited_df["Visualize"] = False
     edited_df = st.data_editor(
         edited_df,
-        use_container_width=True,
+        width='stretch',
         column_config={
             "Long Strike": st.column_config.NumberColumn("Long Strike", format="%.2f"),
             "Short Strike": st.column_config.NumberColumn("Short Strike", format="%.2f"),
@@ -293,11 +293,11 @@ def visualize_callback_bear_put():
 
 if not detailed_df_bear_put.empty:
     st.session_state["bear_put_df"] = detailed_df_bear_put
-    edited_df = detailed_df_bear_put.copy()
+    edited_df = detailed_df_bear_put.reset_index()  # Reset MultiIndex to columns
     edited_df["Visualize"] = False
     edited_df = st.data_editor(
         edited_df,
-        use_container_width=True,
+        width='stretch',
         column_config={
             "Long Strike": st.column_config.NumberColumn("Long Strike", format="%.2f"),
             "Short Strike": st.column_config.NumberColumn("Short Strike", format="%.2f"),
