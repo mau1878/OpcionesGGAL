@@ -165,6 +165,7 @@ with tab1:
         logger.warning(f"No data for Straddle. Filtered calls: {len(nearest_calls)}, puts: {len(nearest_puts)}, Expiration: {st.session_state.selected_exp}")
 
 # Strangle
+# Strangle
 with tab2:
     st.header("Strangle (Débito)")
     st.subheader("Análisis Detallado por Ratio")
@@ -192,6 +193,7 @@ with tab2:
                 axis=1
             )
             edited_df = edited_df.drop(columns=['level_0', 'level_1'])
+            edited_df = edited_df.reset_index(drop=True)  # Ensure integer indices
 
         # Add a visualization column
         edited_df['Visualize'] = False
@@ -242,13 +244,13 @@ with tab2:
         st.session_state["strangle_df"] = edited_df.copy()
 
         # Sync visualize flags to DataFrame
-        for idx in edited_df.index:
+        for idx in range(len(edited_df)):
             edited_df.at[idx, 'Visualize'] = st.session_state["visualize_flags_strangle"][idx]
 
         # Sort DataFrame
         if sort_by == "Breakeven Probability":
             edited_df['Breakeven Probability'] = edited_df.apply(
-                lambda row: norm.cdf((np.log(row['upper_breakeven'] / current_price) - risk_free_rate * expiration_days / 365.0) /
+                lambda row: norm.cdf((np.log(float(row['upper_breakeven']) / current_price) - risk_free_rate * expiration_days / 365.0) /
                                      (st.session_state.iv * np.sqrt(expiration_days / 365.0))), axis=1
             )
             edited_df = edited_df.sort_values(by="Breakeven Probability", ascending=False)
@@ -270,12 +272,8 @@ with tab2:
             width='stretch'
         )
         # Update flags after edit
-        for idx in edited_df.index:
+        for idx in range(len(edited_df)):
             st.session_state["visualize_flags_strangle"][idx] = edited_df.at[idx, 'Visualize']
     else:
         st.warning("No hay datos disponibles para Strangle. Asegúrese de que hay suficientes opciones call y put.")
         logger.warning(f"No data for Strangle. Filtered calls: {len(nearest_calls)}, puts: {len(nearest_puts)}, Expiration: {st.session_state.selected_exp}")
-
-# Display IV failure warning
-if st.session_state["iv_failure_count"] > 10:
-    st.error("Multiple IV calibration failures detected. Check option prices or market data.")
