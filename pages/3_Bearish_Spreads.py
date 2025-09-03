@@ -161,16 +161,26 @@ def visualize_callback_bear_call():
 if not detailed_df_bear_call.empty:
     st.session_state["bear_call_df"] = detailed_df_bear_call
     edited_df = detailed_df_bear_call.copy()
-    for col in ["Net Credit", "Max Profit", "Max Loss", "Breakeven", "Breakeven Probability"]:
-        if col in edited_df.columns:
-            edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}" if col != "Breakeven Probability" else f"{x:.1%}" if x is not None else "-")
     edited_df["Visualize"] = False
     edited_df = st.data_editor(
         edited_df,
         use_container_width=True,
-        column_config={"Visualize": st.column_config.CheckboxColumn("Visualize", default=False)},
+        column_config={
+            "Long Strike": st.column_config.NumberColumn("Long Strike", format="%.2f"),
+            "Short Strike": st.column_config.NumberColumn("Short Strike", format="%.2f"),
+            "Net Credit": st.column_config.NumberColumn("Net Credit", format="%.2f"),
+            "Max Profit": st.column_config.NumberColumn("Max Profit", format="%.2f"),
+            "Max Loss": st.column_config.NumberColumn("Max Loss", format="%.2f"),
+            "Breakeven": st.column_config.NumberColumn("Breakeven", format="%.2f"),
+            "Breakeven Probability": st.column_config.NumberColumn(
+                "Breakeven Probability", format="%.1%", min_value=0.0, max_value=1.0
+            ),
+            "Cost-to-Profit Ratio": st.column_config.NumberColumn("Cost-to-Profit Ratio", format="%.2f"),
+            "Visualize": st.column_config.CheckboxColumn("Visualize", default=False),
+            "Strikes": None
+        },
         disabled=["Long Strike", "Short Strike", "Net Credit", "Max Profit", "Max Loss", "Breakeven", "Breakeven Probability", "Cost-to-Profit Ratio"],
-        key="bear_call_spread_editor_unique",
+        key=f"bear_call_spread_editor_{st.session_state.get('selected_exp', 'default')}",
         on_change=visualize_callback_bear_call
     )
 else:
@@ -284,16 +294,26 @@ def visualize_callback_bear_put():
 if not detailed_df_bear_put.empty:
     st.session_state["bear_put_df"] = detailed_df_bear_put
     edited_df = detailed_df_bear_put.copy()
-    for col in ["Net Cost", "Max Profit", "Max Loss", "Breakeven", "Breakeven Probability"]:
-        if col in edited_df.columns:
-            edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}" if col != "Breakeven Probability" else f"{x:.1%}" if x is not None else "-")
     edited_df["Visualize"] = False
     edited_df = st.data_editor(
         edited_df,
         use_container_width=True,
-        column_config={"Visualize": st.column_config.CheckboxColumn("Visualize", default=False)},
+        column_config={
+            "Long Strike": st.column_config.NumberColumn("Long Strike", format="%.2f"),
+            "Short Strike": st.column_config.NumberColumn("Short Strike", format="%.2f"),
+            "Net Cost": st.column_config.NumberColumn("Net Cost", format="%.2f"),
+            "Max Profit": st.column_config.NumberColumn("Max Profit", format="%.2f"),
+            "Max Loss": st.column_config.NumberColumn("Max Loss", format="%.2f"),
+            "Breakeven": st.column_config.NumberColumn("Breakeven", format="%.2f"),
+            "Breakeven Probability": st.column_config.NumberColumn(
+                "Breakeven Probability", format="%.1%", min_value=0.0, max_value=1.0
+            ),
+            "Cost-to-Profit Ratio": st.column_config.NumberColumn("Cost-to-Profit Ratio", format="%.2f"),
+            "Visualize": st.column_config.CheckboxColumn("Visualize", default=False),
+            "Strikes": None
+        },
         disabled=["Long Strike", "Short Strike", "Net Cost", "Max Profit", "Max Loss", "Breakeven", "Breakeven Probability", "Cost-to-Profit Ratio"],
-        key="bear_put_spread_editor_unique",
+        key=f"bear_put_spread_editor_{st.session_state.get('selected_exp', 'default')}",
         on_change=visualize_callback_bear_put
     )
 else:
