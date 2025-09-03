@@ -38,9 +38,12 @@ if 'selected_visualizations_put' not in st.session_state:
     st.session_state.selected_visualizations_put = []
 
 # Sidebar for Inputs
+# Sidebar for Inputs
 st.sidebar.header("Parámetros de Análisis")
+if 'plot_range_pct' not in st.session_state:
+    st.session_state.plot_range_pct = 0.5  # Default to 50% in decimal
 st.session_state.plot_range_pct = st.sidebar.slider(
-    "Rango de Precio para Gráficos (%)", 5.0, 50.0, st.session_state.get('plot_range_pct', 50.0)
+    "Rango de Precio para Gráficos (% del precio actual)", 10.0, 200.0, st.session_state.get('plot_range_pct', 0.5) * 100
 ) / 100
 st.session_state.include_breakeven_prob = st.sidebar.checkbox("Incluir Probabilidad de Breakeven", value=True)
 show_2d_plot = st.sidebar.checkbox("Mostrar Diagrama 2D", value=True)

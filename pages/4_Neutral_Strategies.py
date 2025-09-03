@@ -28,6 +28,7 @@ if not calls or not puts:
     st.stop()
 
 # Sidebar for Inputs
+# Sidebar for Inputs
 st.sidebar.header("Parámetros de Análisis")
 strategy_type = st.sidebar.selectbox("Tipo de Estrategia", ["Call Butterfly", "Put Butterfly", "Call Condor", "Put Condor"])
 default_ratios = {"Call Butterfly": "1,-2,1", "Put Butterfly": "1,-2,1", "Call Condor": "1,-1,-1,1", "Put Condor": "1,-1,-1,1"}
@@ -41,8 +42,10 @@ try:
 except ValueError as e:
     st.error(f"Error en ratios: {e}")
     contract_ratios = [int(x) for x in default_ratios[strategy_type].split(",")]
+if 'plot_range_pct' not in st.session_state:
+    st.session_state.plot_range_pct = 0.5  # Default to 50% in decimal
 st.session_state.plot_range_pct = st.sidebar.slider(
-    "Rango de Precio para Gráficos (%)", 5.0, 50.0, st.session_state.get('plot_range_pct', 50.0)
+    "Rango de Precio para Gráficos (% del precio actual)", 10.0, 200.0, st.session_state.get('plot_range_pct', 0.5) * 100
 ) / 100
 sort_by = st.sidebar.selectbox("Ordenar Tabla por", ["Cost-to-Profit Ratio", "Breakeven Probability"], key="sort_by")
 

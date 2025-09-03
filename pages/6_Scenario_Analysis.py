@@ -27,9 +27,12 @@ if not calls or not puts:
     st.stop()
 
 # Sidebar for Inputs
+# Sidebar for Inputs
 st.sidebar.header("Parámetros de Análisis")
+if 'plot_range_pct' not in st.session_state:
+    st.session_state.plot_range_pct = 0.5  # Default to 50% in decimal
 st.session_state.plot_range_pct = st.sidebar.slider(
-    "Rango de Precio para Gráficos (%)", 5.0, 50.0, st.session_state.get('plot_range_pct', 50.0)
+    "Rango de Precio para Gráficos (% del precio actual)", 10.0, 200.0, st.session_state.get('plot_range_pct', 0.5) * 100
 ) / 100
 filter_unlimited_loss = st.sidebar.checkbox("Filtrar Estrategias con Pérdidas Ilimitadas", value=True)
 
