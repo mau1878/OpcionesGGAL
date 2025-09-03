@@ -95,6 +95,7 @@ with tab1:
             key="bull_call_spread_visualize_select"
         )
         # Replace the 'if selected_option:' block in each tab
+        # Bull Call Spread tab
         if selected_option:
             try:
                 logger.debug(f"Selected option: {selected_option}")
@@ -118,10 +119,11 @@ with tab1:
                                 result["contract_ratios"] = [1, -1]
                                 visualize_bullish_3d(
                                     result, current_price, expiration_days, st.session_state.iv,
-                                    f"Bull Call Spread {long_strike}-{short_strike}",
+                                    f"Bull Call Spread {long_strike:.1f}-{short_strike:.1f}",
                                     [long_opt, short_opt], ["buy", "sell"]
                                 )
-                                logger.info(f"3D plot generated for Bull Call Spread {long_strike}-{short_strike}")
+                                logger.info(
+                                    f"3D plot generated for Bull Call Spread {long_strike:.1f}-{short_strike:.1f}")
                             else:
                                 st.error("Cálculo inválido para esta combinación.")
                                 logger.error("Invalid calculation for Bull Call Spread")
@@ -137,6 +139,7 @@ with tab1:
             except Exception as e:
                 st.error(f"Error inesperado: {e}")
                 logger.error(f"Unexpected error in selectbox handling: {e}")
+
 
 
 
@@ -215,6 +218,7 @@ with tab2:
             key="bull_put_spread_visualize_select"
         )
         # Replace the 'if selected_option:' block in each tab
+        # Bull Put Spread tab
         if selected_option:
             try:
                 logger.debug(f"Selected option: {selected_option}")
@@ -238,10 +242,11 @@ with tab2:
                                 result["contract_ratios"] = [-1, 1]
                                 visualize_bullish_3d(
                                     result, current_price, expiration_days, st.session_state.iv,
-                                    f"Bull Put Spread {short_strike}-{long_strike}",
+                                    f"Bull Put Spread {short_strike:.1f}-{long_strike:.1f}",
                                     [short_opt, long_opt], ["sell", "buy"]
                                 )
-                                logger.info(f"3D plot generated for Bull Put Spread {short_strike}-{long_strike}")
+                                logger.info(
+                                    f"3D plot generated for Bull Put Spread {short_strike:.1f}-{long_strike:.1f}")
                             else:
                                 st.error("Cálculo inválido para esta combinación.")
                                 logger.error("Invalid calculation for Bull Put Spread")
@@ -257,6 +262,7 @@ with tab2:
             except Exception as e:
                 st.error(f"Error inesperado: {e}")
                 logger.error(f"Unexpected error in selectbox handling: {e}")
+
 
         st.warning("No hay datos disponibles para Bull Put Spread. Asegúrese de que hay suficientes opciones put en el rango seleccionado o intente actualizar los datos.")
         logger.warning(f"No data for Bull Put Spread. Filtered puts: {len(puts)}, Strikes: {min_strike:.2f}-{max_strike:.2f}, Expiration: {st.session_state.selected_exp}")
