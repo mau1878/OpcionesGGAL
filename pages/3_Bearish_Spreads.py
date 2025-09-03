@@ -26,12 +26,14 @@ num_contracts = st.session_state.num_contracts
 min_strike = current_price * (1 - st.session_state.plot_range_pct)
 max_strike = current_price * (1 + st.session_state.plot_range_pct)
 
-# Log available strikes for debugging
+# Log available strikes and option data for debugging
 call_strikes = sorted({opt["strike"] for opt in calls})
 put_strikes = sorted({opt["strike"] for opt in puts})
 logger.info(f"Available call strikes: {call_strikes}")
 logger.info(f"Available put strikes: {put_strikes}")
 logger.info(f"Strike range: {min_strike:.2f}-{max_strike:.2f}")
+logger.info(f"Calls data: {[{k: v for k, v in opt.items()} for opt in calls]}")
+logger.info(f"Puts data: {[{k: v for k, v in opt.items()} for opt in puts]}")
 
 # Tabs for different strategies
 tab1, tab2 = st.tabs(["Bear Call Spread", "Bear Put Spread"])
@@ -82,6 +84,7 @@ with tab1:
         st.session_state["bear_call_df"] = edited_df.copy()
 
         # Display DataFrame with index
+        st.write("Select a row by its index to visualize the 3D payoff plot.")
         st.dataframe(edited_df, use_container_width=True, hide_index=False)
 
         # Create selectbox options with row index
@@ -190,6 +193,7 @@ with tab2:
         st.session_state["bear_put_df"] = edited_df.copy()
 
         # Display DataFrame with index
+        st.write("Select a row by its index to visualize the 3D payoff plot.")
         st.dataframe(edited_df, use_container_width=True, hide_index=False)
 
         # Create selectbox options with row index

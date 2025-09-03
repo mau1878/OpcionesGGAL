@@ -171,10 +171,14 @@ def calculate_bull_put_spread(short_put, long_put, num_contracts, commission_rat
     }
 
 def calculate_bear_call_spread(short_call, long_call, num_contracts, commission_rate):
-    if short_call["strike"] >= long_call["strike"]: return None
+    if short_call["strike"] >= long_call["strike"]: 
+        logger.debug(f"Invalid strike order: short={short_call['strike']}, long={long_call['strike']}")
+        return None
     short_price = get_strategy_price(short_call, "sell")
     long_price = get_strategy_price(long_call, "buy")
-    if any(p is None for p in [short_price, long_price]): return None
+    if any(p is None for p in [short_price, long_price]): 
+        logger.debug(f"Invalid prices: short_price={short_price}, long_price={long_price}")
+        return None
 
     base_cost = (long_price - short_price) * 100 * num_contracts
     total_fees = calculate_fees(long_price * 100 * num_contracts, commission_rate) + \
@@ -182,7 +186,6 @@ def calculate_bear_call_spread(short_call, long_call, num_contracts, commission_
     net_cost = base_cost + total_fees
     max_loss = ((long_call["strike"] - short_call["strike"]) * 100 * num_contracts) - net_cost
     max_profit = -net_cost
-    if max_profit <= 0: return None
     upper_breakeven = short_call["strike"] + (-net_cost / (100 * num_contracts))
     return {
         "raw_net": base_cost,
