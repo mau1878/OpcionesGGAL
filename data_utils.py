@@ -4,6 +4,8 @@ from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 import logging
 import streamlit as st
+from bs4 import BeautifulSoup
+import pandas as pd
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -88,16 +90,104 @@ def get_ggal_data() -> tuple[dict | None, list]:
     ggal_stock = next((s for s in stock_data if s["symbol"] == "GGAL"), None)
     if not ggal_stock:
         logger.error("GGAL stock data not found")
+        st.error("GGAL stock data not found")
         return None, []
+    
+    # Map the price key (based on provided sample data)
+    price_key = None
+    for key in ["c", "price", "last_price", "close", "current_price"]:
+        if key in ggal_stock and isinstance(ggal_stock[key], (int, float)) and ggal_stock[key] > 0:
+            price_key = key
+            break
+    if price_key:
+        ggal_stock["price"] = ggal_stock[price_key]
+        logger.info(f"Mapped price from '{price_key}' to 'price': {ggal_stock['price']}")
+    else:
+        logger.error(f"No valid price key found in GGAL stock data: {ggal_stock}")
+        st.error(f"No valid price found in GGAL stock data: {ggal_stock}")
+        return None, []
+    
+    logger.info(f"GGAL stock data: {ggal_stock}")
+    
     ggal_options = []
     for o in options_data:
         opt_type, strike, exp = parse_option_symbol(o["symbol"])
         px_bid, px_ask = o.get("px_bid", 0), o.get("px_ask", 0)
         if all([opt_type, strike, exp, px_ask > 0, px_bid > 0, abs(px_ask - px_bid) / max(px_ask, px_bid) < 0.2]):
             ggal_options.append({
-                "symbol": o["symbol"], "type": opt_type, "strike": strike,
-                "expiration": exp, "px_bid": px_bid, "px_ask": px_ask
+                "symbol": o["symbol"], 
+                "type": opt_type, 
+                "strike": strike,
+                "expiration": exp, 
+                "px_bid": px_bid, 
+                "px_ask": px_ask,
+                "px_mid": (px_bid + px_ask) / 2
             })
         else:
             logger.debug(f"Skipped option {o['symbol']}: Invalid data or wide spread")
+    
+    logger.info(f"GGAL options count: {len(ggal_options)}")
     return ggal_stock, ggal_options
+
+def fetch_cauciones_table(url: str, headers: dict = None) -> pd.DataFrame:
+    """
+    Fetches the 'Cauciones' table from the given URL and returns it as a pandas DataFrame.
+    """
+    session = requests.Session()
+    if headers:
+        session.headers.update(headers)
+    
+    response = session.get(url)
+    response.raise_for_status()
+    
+    soup = BeautifulSoup(response.text, 'html.parser')
+    
+    table = soup.find('table') or soup.find('div', class_='tabla')
+    if not table:
+        raise RuntimeError("Unable to locate the Cauciones table in the HTML.")
+    
+    headers = [th.get_text(strip=True) for th in table.find_all('th')]
+    if not headers:
+        first_row = table.find('tr')
+        headers = [td.get_text(strip=True) for td in first_row.find_all(['th', 'td'])]
+    
+    rows = []
+    for tr in table.find_all('tr')[1:]:
+        cells = tr.find_all(['td', 'th'])
+        if cells:
+            row = [c.get_text(strip=True) for c in cells]
+            rows.append(row)
+    
+    df = pd.DataFrame(rows, columns=headers if headers and len(headers) == len(rows[0]) else None)
+    return df
+
+def get_risk_free_rate():
+    """
+    Fetches the Tasa Tomadora for Plazo 30-35 days in PESOS from the Cauciones table.
+    """
+    url = "https://iol.invertironline.com/mercado/cotizaciones/argentina/Cauciones"
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; TableScraper/1.0)"}
+    try:
+        df = fetch_cauciones_table(url, headers)
+        # Clean and convert Tasa Tomadora to float
+        df['Tasa Tomadora'] = df['Tasa Tomadora'].str.replace('%', '').str.replace(',', '.').str.strip()
+        df['Tasa Tomadora'] = pd.to_numeric(df['Tasa Tomadora'], errors='coerce') / 100
+        df['Plazo'] = pd.to_numeric(df['Plazo'], errors='coerce')
+        
+        # Filter for PESOS and valid Tasa Tomadora
+        df_pesos = df[(df['Moneda'] == 'PESOS') & (df['Tasa Tomadora'].notna()) & (df['Tasa Tomadora'] > 0)]
+        
+        # Try Plazo 30, 31, 32, 33, 34, 35 in order
+        for plazo in [30, 31, 32, 33, 34, 35]:
+            tasa = df_pesos[df_pesos['Plazo'] == plazo]['Tasa Tomadora']
+            if not tasa.empty:
+                logger.info(f"Tasa Tomadora found for Plazo {plazo}: {tasa.iloc[0]}")
+                return tasa.iloc[0]
+        # Fallback to default if no valid Plazo found
+        st.warning("No se encontró una Tasa Tomadora válida para Plazo 30-35 días en PESOS. Usando tasa predeterminada de 35%.")
+        logger.warning("No valid Tasa Tomadora found for Plazo 30-35 days in PESOS. Using default 35%.")
+        return 0.35
+    except Exception as e:
+        st.error(f"Error al obtener la Tasa Tomadora: {e}. Usando tasa predeterminada de 35%.")
+        logger.error(f"Error fetching Tasa Tomadora: {e}")
+        return 0.35
