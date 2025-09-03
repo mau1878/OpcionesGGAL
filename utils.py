@@ -92,9 +92,10 @@ def get_ggal_data() -> tuple[dict | None, list]:
         return None, []
     ggal_options = []
     for o in options_data:
-        opt_type, strike, exp = parse_option_symbol(o["symbol"])
         px_bid = o.get("px_bid")
         px_ask = o.get("px_ask")
+        logger.debug(f"Raw option data: symbol={o.get('symbol')}, px_bid={px_bid}, px_ask={px_ask}")
+        opt_type, strike, exp = parse_option_symbol(o["symbol"])
         if not (px_bid and px_ask and px_bid > 0 and px_ask > 0):
             logger.warning(f"Invalid bid/ask for option {o['symbol']}: bid={px_bid}, ask={px_ask}")
             continue
