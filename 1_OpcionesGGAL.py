@@ -222,7 +222,7 @@ def calculate_option_price(option: Dict, spot_price: float, risk_free_rate: floa
     except Exception as e:
         logger.error(f"Error calculating price for symbol {option['symbol']}, strike {option['strike']}: {e}")
         st.warning(f"Error calculating price for symbol {option['symbol']}, strike {option['strike']}: {e}")
-        # Fallback to intrinsic value for Opciones Individuales
+        # Fallback to intrinsic value
         strike = float(option['strike'])
         if option['type'].lower() == 'call':
             return max(spot_price - strike, 0)
@@ -374,23 +374,30 @@ if strategy_page == "Opciones Individuales":
         price = calculate_option_price(option, st.session_state.current_price, st.session_state.risk_free_rate, st.session_state.iv, date.today(), st.session_state.selected_exp)
         calls_data.append({
             'Strike': option['strike'],
-            'Bid': option.get('px_bid', '-'),
-            'Ask': option.get('px_ask', '-'),
-            'Theoretical Price': price if price else '-'
+            'Bid': option.get('px_bid', 0.0),
+            'Ask': option.get('px_ask', 0.0),
+            'Theoretical Price': float(price) if price is not None else 0.0
         })
     for option in st.session_state.filtered_puts:
         price = calculate_option_price(option, st.session_state.current_price, st.session_state.risk_free_rate, st.session_state.iv, date.today(), st.session_state.selected_exp)
         puts_data.append({
             'Strike': option['strike'],
-            'Bid': option.get('px_bid', '-'),
-            'Ask': option.get('px_ask', '-'),
-            'Theoretical Price': price if price else '-'
+            'Bid': option.get('px_bid', 0.0),
+            'Ask': option.get('px_ask', 0.0),
+            'Theoretical Price': float(price) if price is not None else 0.0
         })
 
+    # Convert to DataFrame with numeric types
+    calls_df = pd.DataFrame(calls_data)
+    puts_df = pd.DataFrame(puts_data)
+    for df in [calls_df, puts_df]:
+        for col in ['Strike', 'Bid', 'Ask', 'Theoretical Price']:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+
     st.subheader("Calls")
-    st.dataframe(pd.DataFrame(calls_data).round(4))
+    st.dataframe(calls_df.round(4))
     st.subheader("Puts")
-    st.dataframe(pd.DataFrame(puts_data).round(4))
+    st.dataframe(puts_df.round(4))
 
 # Covered Call strategy
 elif strategy_page == "Covered Call":
@@ -401,10 +408,10 @@ elif strategy_page == "Covered Call":
     selected_call = st.selectbox(
         "Selecciona un Call para vender",
         st.session_state.filtered_calls,
-        format_func=lambda x: f"Strike {x['strike']:.2f} (Bid: {x.get('px_bid', '-')}, Ask: {x.get('px_ask', '-')})"
+        format_func=lambda x: f"Strike {x['strike']:.2f} (Bid: {x.get('px_bid', 0.0):.2f}, Ask: {x.get('px_ask', 0.0):.2f})"
     )
     strategy = [
-        {'type': 'call', 'strike': selected_call['strike'], 'position': 'short', 'px_bid': selected_call.get('px_bid', 0), 'px_ask': selected_call.get('px_ask', 0), 'symbol': selected_call['symbol']},
+        {'type': 'call', 'strike': selected_call['strike'], 'position': 'short', 'px_bid': selected_call.get('px_bid', 0.0), 'px_ask': selected_call.get('px_ask', 0.0), 'symbol': selected_call['symbol'], 'expiration': selected_call['expiration']},
         {'type': 'stock', 'strike': st.session_state.current_price, 'position': 'long', 'symbol': 'GGAL'}
     ]
     
@@ -459,10 +466,10 @@ elif strategy_page == "Protective Put":
     selected_put = st.selectbox(
         "Selecciona un Put para comprar",
         st.session_state.filtered_puts,
-        format_func=lambda x: f"Strike {x['strike']:.2f} (Bid: {x.get('px_bid', '-')}, Ask: {x.get('px_ask', '-')})"
+        format_func=lambda x: f"Strike {x['strike']:.2f} (Bid: {x.get('px_bid', 0.0):.2f}, Ask: {x.get('px_ask', 0.0):.2f})"
     )
     strategy = [
-        {'type': 'put', 'strike': selected_put['strike'], 'position': 'long', 'px_bid': selected_put.get('px_bid', 0), 'px_ask': selected_put.get('px_ask', 0), 'symbol': selected_put['symbol']},
+        {'type': 'put', 'strike': selected_put['strike'], 'position': 'long', 'px_bid': selected_put.get('px_bid', 0.0), 'px_ask': selected_put.get('px_ask', 0.0), 'symbol': selected_put['symbol'], 'expiration': selected_put['expiration']},
         {'type': 'stock', 'strike': st.session_state.current_price, 'position': 'long', 'symbol': 'GGAL'}
     ]
     
