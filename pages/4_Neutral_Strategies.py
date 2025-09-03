@@ -28,7 +28,6 @@ if not calls or not puts:
     st.stop()
 
 # Sidebar for Inputs
-# Sidebar for Inputs
 st.sidebar.header("Parámetros de Análisis")
 strategy_type = st.sidebar.selectbox("Tipo de Estrategia", ["Call Butterfly", "Put Butterfly", "Call Condor", "Put Condor"])
 default_ratios = {"Call Butterfly": "1,-2,1", "Put Butterfly": "1,-2,1", "Call Condor": "1,-1,-1,1", "Put Condor": "1,-1,-1,1"}
@@ -42,12 +41,14 @@ try:
 except ValueError as e:
     st.error(f"Error en ratios: {e}")
     contract_ratios = [int(x) for x in default_ratios[strategy_type].split(",")]
-if 'plot_range_pct' not in st.session_state:
-    st.session_state.plot_range_pct = 0.5  # Default to 50% in decimal
 st.session_state.plot_range_pct = st.sidebar.slider(
-    "Rango de Precio para Gráficos (% del precio actual)", 10.0, 200.0, st.session_state.get('plot_range_pct', 0.5) * 100
+    "Rango de Precio para Gráficos (% del precio actual)", 10.0, 200.0, st.session_state.get('plot_range_pct', 50.0)
 ) / 100
 sort_by = st.sidebar.selectbox("Ordenar Tabla por", ["Cost-to-Profit Ratio", "Breakeven Probability"], key="sort_by")
+
+# Initialize visualization state
+if 'selected_visualizations_neutral' not in st.session_state:
+    st.session_state.selected_visualizations_neutral = []
 
 # Strategy Calculations
 results = []
@@ -82,7 +83,7 @@ for strikes in combinations(sorted_strikes, num_options):
     
     def find_breakeven(price_range, tolerance=1e-3):
         breakevens = []
-        for p in np.linspace(price_range[0], price_range[1], 1000):
+        for p in np.linspace(price_range[0], price_range[1], 500):  # Reduced for performance
             if abs(utils.calculate_strategy_value(options, actions, contracts, p, 0, iv_calibrated) - net_cost) < tolerance:
                 breakevens.append(p)
         return breakevens
@@ -122,62 +123,68 @@ if results:
         edited_rows = edited.get('edited_rows', {})
         for idx in edited_rows:
             if isinstance(idx, int) and 0 <= idx < len(df):
-                if edited_rows[idx].get('Visualize', False):
-                    row = df.iloc[idx]
-                    options = row["Options"]
-                    actions = row["Actions"]
-                    contracts = row["Contracts"]
-                    net_cost = row["Net Cost"]
-                    iv_calibrated = row["IV"]
-                    breakevens = row["Breakevens"]
-                    min_price = current_price * (1 - st.session_state.plot_range_pct)
-                    max_price = current_price * (1 + st.session_state.plot_range_pct)
-                    
-                    # 3D Plot
-                    X, Y, Z = utils._compute_payoff_grid(
-                        lambda p, t, s: utils.calculate_strategy_value(options, actions, contracts, p, t, s),
-                        current_price, expiration_days, iv_calibrated, net_cost
-                    )
-                    fig = utils._create_3d_figure(X, Y, Z, strategy_type, current_price)
-                    st.plotly_chart(fig, use_container_width=True, key=f"3d_plot_{idx}")
-                    
-                    # 2D Plot
-                    st.subheader("Diagrama de P&L al Vencimiento")
-                    price_points = np.linspace(min_price, max_price, 100)
-                    payoff_at_expiration = [utils.calculate_strategy_value(options, actions, contracts, p, 0, iv_calibrated) - net_cost for p in price_points]
-                    fig_2d = go.Figure()
-                    fig_2d.add_trace(
-                        go.Scatter(
-                            x=price_points, y=payoff_at_expiration,
-                            mode="lines", name="P&L al Vencimiento", line=dict(color="blue")
-                        )
-                    )
-                    fig_2d.add_trace(
-                        go.Scatter(
-                            x=[current_price],
-                            y=[utils.calculate_strategy_value(options, actions, contracts, current_price, 0, iv_calibrated) - net_cost],
-                            mode="markers", name="Precio Actual", marker=dict(size=10, color="red")
-                        )
-                    )
-                    fig_2d.update_layout(
-                        title=f"P&L at Expiration for {strategy_type}",
-                        xaxis_title="Precio de GGAL (ARS)",
-                        yaxis_title="P&L (ARS)",
-                        xaxis=dict(tickvals=[min_price, current_price, max_price],
-                                   ticktext=[f"{min_price:.2f}", f"{current_price:.2f}", f"{max_price:.2f}"]),
-                        yaxis=dict(zeroline=True, zerolinecolor="black", zerolinewidth=1),
-                        showlegend=True,
-                        height=400
-                    )
-                    for b in breakevens[:2]:
-                        fig_2d.add_vline(x=b, line_dash="dash", line_color="green", annotation_text=f"Breakeven: {b:.2f}")
-                    if breakevens:
-                        fig_2d.add_vrect(
-                            x0=min(breakevens), x1=max(breakevens),
-                            fillcolor="green", opacity=0.1, line_width=0,
-                            annotation_text="Rango de Ganancia", annotation_position="top"
-                        )
-                    st.plotly_chart(fig_2d, use_container_width=True, key=f"2d_plot_{idx}")
+                visualize_state = edited_rows[idx].get('Visualize', False)
+                if visualize_state and idx not in st.session_state["selected_visualizations_neutral"] and len(st.session_state["selected_visualizations_neutral"]) < 5:
+                    st.session_state["selected_visualizations_neutral"].append(idx)
+                elif not visualize_state and idx in st.session_state["selected_visualizations_neutral"]:
+                    st.session_state["selected_visualizations_neutral"].remove(idx)
+        
+        for idx in st.session_state["selected_visualizations_neutral"]:
+            row = df.iloc[idx]
+            options = row["Options"]
+            actions = row["Actions"]
+            contracts = row["Contracts"]
+            net_cost = row["Net Cost"]
+            iv_calibrated = row["IV"]
+            breakevens = row["Breakevens"]
+            min_price = current_price * (1 - st.session_state.plot_range_pct)
+            max_price = current_price * (1 + st.session_state.plot_range_pct)
+            
+            # 3D Plot
+            X, Y, Z, min_price_3d, max_price_3d, times = utils._compute_payoff_grid(
+                lambda p, t, s: utils.calculate_strategy_value(options, actions, contracts, p, t, s),
+                current_price, expiration_days, iv_calibrated, net_cost
+            )
+            fig = utils._create_3d_figure(X, Y, Z, strategy_type, current_price)
+            st.plotly_chart(fig, use_container_width=True, key=f"3d_plot_{idx}")
+            
+            # 2D Plot
+            st.subheader("Diagrama de P&L al Vencimiento")
+            price_points = np.linspace(min_price, max_price, 100)
+            payoff_at_expiration = [utils.calculate_strategy_value(options, actions, contracts, p, 0, iv_calibrated) - net_cost for p in price_points]
+            fig_2d = go.Figure()
+            fig_2d.add_trace(
+                go.Scatter(
+                    x=price_points, y=payoff_at_expiration,
+                    mode="lines", name="P&L al Vencimiento", line=dict(color="blue")
+                )
+            )
+            fig_2d.add_trace(
+                go.Scatter(
+                    x=[current_price],
+                    y=[utils.calculate_strategy_value(options, actions, contracts, current_price, 0, iv_calibrated) - net_cost],
+                    mode="markers", name="Precio Actual", marker=dict(size=10, color="red")
+                )
+            )
+            fig_2d.update_layout(
+                title=f"P&L at Expiration for {strategy_type}",
+                xaxis_title="Precio de GGAL (ARS)",
+                yaxis_title="P&L (ARS)",
+                xaxis=dict(tickvals=[min_price, current_price, max_price],
+                           ticktext=[f"{min_price:.2f}", f"{current_price:.2f}", f"{max_price:.2f}"]),
+                yaxis=dict(zeroline=True, zerolinecolor="black", zerolinewidth=1),
+                showlegend=True,
+                height=400
+            )
+            for b in breakevens[:2]:
+                fig_2d.add_vline(x=b, line_dash="dash", line_color="green", annotation_text=f"Breakeven: {b:.2f}")
+            if breakevens:
+                fig_2d.add_vrect(
+                    x0=min(breakevens), x1=max(breakevens),
+                    fillcolor="green", opacity=0.1, line_width=0,
+                    annotation_text="Rango de Ganancia", annotation_position="top"
+                )
+            st.plotly_chart(fig_2d, use_container_width=True, key=f"2d_plot_{idx}")
     
     edited_df = st.data_editor(
         edited_df,
