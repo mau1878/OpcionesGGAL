@@ -681,6 +681,35 @@ def estimate_breakeven_probability(options, actions, contracts, net_cost, T_year
             prob += norm.cdf((upper_log - mu) / sigma_t) - norm.cdf((lower_log - mu) / sigma_t)
     return prob
 
+def calculate_strategy_value(options, actions, contracts, price, t, sigma):
+    """
+    Calculate the total value of an options strategy at a given price and time.
+    
+    Args:
+        options (list): List of option dictionaries
+        actions (list): List of actions ("buy" or "sell")
+        contracts (list): List of contract quantities
+        price (float): Underlying stock price
+        t (float): Time to expiration in years
+        sigma (float): Implied volatility
+    Returns:
+        float: Total strategy value
+    """
+    total_value = 0.0
+    for opt, action, num_contracts in zip(options, actions, contracts):
+        opt_type = opt["type"]
+        strike = opt["strike"]
+        if t == 0:  # At expiration, use intrinsic value
+            if opt_type == "call":
+                value = max(0, price - strike)
+            else:  # put
+                value = max(0, strike - price)
+        else:  # Use Black-Scholes for t > 0
+            value = utils.black_scholes(price, strike, t, st.session_state.risk_free_rate, sigma, opt_type)
+        multiplier = 1 if action == "buy" else -1
+        total_value += value * num_contracts * 100 * multiplier
+    return total_value
+
 def has_limited_loss(options, actions, contracts):
     """
     Check if a strategy has limited loss potential.
