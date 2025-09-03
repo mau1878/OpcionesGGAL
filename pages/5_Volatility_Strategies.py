@@ -16,8 +16,8 @@ if 'filtered_calls' not in st.session_state or not st.session_state.filtered_cal
     st.warning("Por favor, cargue los datos y seleccione los parámetros en la página '1_Home' primero.")
     st.stop()
 
-calls = sorted(st.session_state.filtered_calls, key=lambda x: x['strike'])
-puts = sorted(st.session_state.filtered_puts, key=lambda x: x['strike'])
+calls = st.session_state.filtered_calls
+puts = st.session_state.filtered_puts
 current_price = st.session_state.current_price
 expiration_days = st.session_state.expiration_days
 risk_free_rate = st.session_state.risk_free_rate

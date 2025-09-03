@@ -142,6 +142,34 @@ def find_breakeven(options, actions, contracts, net_cost, iv_calibrated, min_pri
             breakevens.append(p)
     return breakevens[:2]  # Return up to two breakevens
 
+# Function to validate butterfly payoff at expiration
+def validate_butterfly_payoff(options, actions, contracts, strikes, strategy_type):
+    # Test payoff at key points: below low strike, at mid strike, above high strike
+    low_strike, mid_strike, high_strike = strikes
+    test_prices = [low_strike * 0.8, mid_strike, high_strike * 1.2]
+    expected_payoffs = []
+    for price in test_prices:
+        payoff = calculate_strategy_value(options, actions, contracts, price, 0, 0)  # Use intrinsic value
+        expected_payoffs.append(payoff)
+    # Expected: near zero below low, max profit at mid, near zero above high
+    is_valid = (abs(expected_payoffs[0]) < 1e-2 and abs(expected_payoffs[2]) < 1e-2 and expected_payoffs[1] > 0)
+    logger.info(f"Validation for {strategy_type}, strikes {strikes}: payoffs={expected_payoffs}, valid={is_valid}")
+    return is_valid
+
+# Function to validate condor payoff at expiration
+def validate_condor_payoff(options, actions, contracts, strikes, strategy_type):
+    # Test payoff at key points: below low, between mid_low and mid_high, above high
+    low_strike, mid_low_strike, mid_high_strike, high_strike = strikes
+    test_prices = [low_strike * 0.8, (mid_low_strike + mid_high_strike) / 2, high_strike * 1.2]
+    expected_payoffs = []
+    for price in test_prices:
+        payoff = calculate_strategy_value(options, actions, contracts, price, 0, 0)  # Use intrinsic value
+        expected_payoffs.append(payoff)
+    # Expected: near zero below low, max profit between mid_low and mid_high, near zero above high
+    is_valid = (abs(expected_payoffs[0]) < 1e-2 and abs(expected_payoffs[2]) < 1e-2 and expected_payoffs[1] > 0)
+    logger.info(f"Validation for {strategy_type}, strikes {strikes}: payoffs={expected_payoffs}, valid={is_valid}")
+    return is_valid
+
 # Generate all butterfly and condor combinations
 def generate_strategy_combinations():
     strategies = []
@@ -151,6 +179,9 @@ def generate_strategy_combinations():
     # Butterfly strategies (Call and Put)
     for option_type, options, strikes_set in [("Call Butterfly", calls, call_strikes_set), ("Put Butterfly", puts, put_strikes_set)]:
         strikes = sorted(strikes_set)
+        if len(strikes) < 3:
+            logger.warning(f"Insufficient strikes for {option_type}: {len(strikes)}")
+            continue
         # Generate all combinations of three strikes: low < mid < high
         for low, mid, high in combinations(strikes, 3):
             if low >= mid or mid >= high:
@@ -170,6 +201,11 @@ def generate_strategy_combinations():
                 logger.debug(f"Invalid cost for {option_type}, strikes {low}-{mid}-{high}")
                 continue
 
+            # Validate payoff profile
+            if not validate_butterfly_payoff(options_list, actions, contracts_list, [low, mid, high], option_type):
+                logger.debug(f"Invalid payoff profile for {option_type}, strikes {low}-{mid}-{high}")
+                continue
+
             raw_net = sum(
                 utils.get_strategy_price(opt, action) * num * 100 * (1 if action == "buy" else -1)
                 for opt, action, num in zip(options_list, actions, contracts_list)
@@ -183,6 +219,8 @@ def generate_strategy_combinations():
                 st.session_state["iv_failure_count"] += 1
                 logger.debug(f"Unrealistic IV ({iv_calibrated}) for {option_type}, strikes {low}-{mid}-{high}, using fallback IV=0.30")
                 iv_calibrated = utils.DEFAULT_IV
+
+            logger.info(f"Calculating metrics for {option_type}, strikes {low}-{mid}-{high}, net_cost={net_cost:.2f}, iv={iv_calibrated:.2%}")
 
             prob = estimate_breakeven_probability(options_list, actions, contracts_list, net_cost, T_years, iv_calibrated)
             max_profit, max_loss = calculate_potential_metrics(options_list, actions, contracts_list, net_cost, price_range_pct, iv_calibrated)
@@ -209,6 +247,9 @@ def generate_strategy_combinations():
     # Condor strategies (Call and Put)
     for option_type, options, strikes_set in [("Call Condor", calls, call_strikes_set), ("Put Condor", puts, put_strikes_set)]:
         strikes = sorted(strikes_set)
+        if len(strikes) < 4:
+            logger.warning(f"Insufficient strikes for {option_type}: {len(strikes)}")
+            continue
         # Generate all combinations of four strikes: low < mid_low < mid_high < high
         for low, mid_low, mid_high, high in combinations(strikes, 4):
             if low >= mid_low or mid_low >= mid_high or mid_high >= high:
@@ -229,6 +270,11 @@ def generate_strategy_combinations():
                 logger.debug(f"Invalid cost for {option_type}, strikes {low}-{mid_low}-{mid_high}-{high}")
                 continue
 
+            # Validate payoff profile
+            if not validate_condor_payoff(options_list, actions, contracts_list, [low, mid_low, mid_high, high], option_type):
+                logger.debug(f"Invalid payoff profile for {option_type}, strikes {low}-{mid_low}-{mid_high}-{high}")
+                continue
+
             raw_net = sum(
                 utils.get_strategy_price(opt, action) * num * 100 * (1 if action == "buy" else -1)
                 for opt, action, num in zip(options_list, actions, contracts_list)
@@ -242,6 +288,8 @@ def generate_strategy_combinations():
                 st.session_state["iv_failure_count"] += 1
                 logger.debug(f"Unrealistic IV ({iv_calibrated}) for {option_type}, strikes {low}-{mid_low}-{mid_high}-{high}, using fallback IV=0.30")
                 iv_calibrated = utils.DEFAULT_IV
+
+            logger.info(f"Calculating metrics for {option_type}, strikes {low}-{mid_low}-{mid_high}-{high}, net_cost={net_cost:.2f}, iv={iv_calibrated:.2%}")
 
             prob = estimate_breakeven_probability(options_list, actions, contracts_list, net_cost, T_years, iv_calibrated)
             max_profit, max_loss = calculate_potential_metrics(options_list, actions, contracts_list, net_cost, price_range_pct, iv_calibrated)
@@ -271,7 +319,7 @@ def generate_strategy_combinations():
 st.header("Todas las Combinaciones de Butterfly y Condor")
 strategies = generate_strategy_combinations()
 if not strategies:
-    st.warning("No se encontraron combinaciones válidas de butterfly o condor. Verifique los datos de opciones.")
+    st.warning("No se encontraron combinaciones válidas de butterfly o condor. Verifique los datos de opciones o asegúrese de que hay suficientes strikes disponibles.")
     st.stop()
 
 df_strategies = pd.DataFrame(strategies)

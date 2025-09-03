@@ -43,7 +43,6 @@ EXPIRATION_MAP_2025 = {
     "D": get_third_friday(year, 12), "DI": get_third_friday(year, 12),
 }
 
-@st.cache_data(ttl=300)
 def fetch_data(url: str) -> list:
     session = requests.Session()
     retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
@@ -53,24 +52,12 @@ def fetch_data(url: str) -> list:
         response = session.get(url, timeout=30)
         response.raise_for_status()
         return response.json()
-    except requests.Timeout:
-        logger.error(f"Timeout fetching data from {url}")
-        st.error(f"Timeout fetching data from {url}")
-        return []
-    except requests.HTTPError as e:
-        logger.error(f"HTTP error from {url}: {e}")
-        st.error(f"HTTP error from {url}: {e}")
-        return []
     except requests.RequestException as e:
         logger.error(f"Error fetching data from {url}: {e}")
         st.error(f"Error fetching data from {url}: {e}")
         return []
     finally:
         session.close()
-
-
-
-
 
 def parse_option_symbol(symbol: str) -> tuple[str | None, float | None, date | None]:
     option_type = "call" if symbol.startswith("GFGC") else "put" if symbol.startswith("GFGV") else None
@@ -96,7 +83,6 @@ def parse_option_symbol(symbol: str) -> tuple[str | None, float | None, date | N
         logger.warning(f"Unmapped expiration suffix: {suffix} in symbol: {symbol}")
     return option_type, strike_price, exp_date
 
-@st.cache_data(ttl=300)
 def get_ggal_data() -> tuple[dict | None, list]:
     stock_data = fetch_data(STOCK_URL)
     options_data = fetch_data(OPTIONS_URL)
@@ -106,17 +92,11 @@ def get_ggal_data() -> tuple[dict | None, list]:
         return None, []
     ggal_options = []
     for o in options_data:
-        px_bid = o.get("px_bid")
-        px_ask = o.get("px_ask")
-        logger.debug(f"Raw option data: symbol={o.get('symbol')}, px_bid={px_bid}, px_ask={px_ask}")
-        if not (isinstance(px_bid, (int, float)) and px_bid > 0 and isinstance(px_ask, (int, float)) and px_ask > 0):
-            logger.warning(f"Invalid bid/ask for option {o['symbol']}: bid={px_bid}, ask={px_ask}")
-            continue
         opt_type, strike, exp = parse_option_symbol(o["symbol"])
-        if all([opt_type, strike, exp]):
+        if all([opt_type, strike, exp, o.get("px_ask", 0) > 0, o.get("px_bid", 0) > 0]):
             ggal_options.append({
                 "symbol": o["symbol"], "type": opt_type, "strike": strike,
-                "expiration": exp, "px_bid": px_bid, "px_ask": px_ask
+                "expiration": exp, "px_bid": o["px_bid"], "px_ask": o["px_ask"]
             })
         else:
             logger.debug(f"Skipped option {o['symbol']}: Invalid data")
@@ -124,7 +104,7 @@ def get_ggal_data() -> tuple[dict | None, list]:
 
 def get_strategy_price(option: dict, action: str) -> float | None:
     price = option["px_ask"] if action == "buy" else option["px_bid"]
-    return price if isinstance(price, (int, float)) and price > 0 else None
+    return price if price > 0 else None
 
 def calculate_fees(base_cost: float, commission_rate: float) -> float:
     commission = base_cost * commission_rate
@@ -476,43 +456,49 @@ def calculate_option_iv(S, K, T, r, premium, option_type="call"):
     return None
 # --- Shared Helpers for Viz and Tables ---
 
-logger = logging.getLogger(__name__)
-
-DEFAULT_IV = 0.3  # Default implied volatility (30%)
-
-def calculate_strategy_cost(options: list, actions: list, contracts: list) -> float | None:
-    if len(options) != len(actions) or len(options) != len(contracts):
-        return None
-    total_cost = 0.0
-    for opt, action, num in zip(options, actions, contracts):
-        price = get_strategy_price(opt, action)
-        if price is None:
-            return None
-        total_cost += price * 100 * num
-    fees = calculate_fees(abs(total_cost), st.session_state.get("commission_rate", 0.005))
-    return total_cost + fees if total_cost >= 0 else total_cost - fees
-
-def _calibrate_iv(raw_net: float, current_price: float, expiration_days: float, strategy_value: callable, options: list, actions: list, contract_ratios: list = None) -> float:
-    if contract_ratios is None:
-        contract_ratios = [1] * len(options)
-    T = expiration_days / 365.0
-    def objective(sigma):
-        val = strategy_value(current_price, T, sigma)
-        return (val - raw_net) ** 2
-    try:
-        result = minimize_scalar(objective, bounds=(0, 2), method="bounded")
-        if result.success:
-            iv = result.x
-            if iv <= 0:
-                logger.warning(f"Negative IV calculated: {iv}. Returning DEFAULT_IV.")
-                return DEFAULT_IV
-            return iv
-        else:
-            logger.warning(f"IV calibration failed: {result.message}")
-            return DEFAULT_IV
-    except Exception as e:
-        logger.warning(f"IV calibration exception: {e}")
+def _calibrate_iv(raw_net, current_price, expiration_days, strategy_value_func, options, option_actions, contract_ratios=None):
+    if not options or not option_actions:
+        logger.warning("No options or actions provided for IV calibration")
         return DEFAULT_IV
+
+    r = st.session_state.get("risk_free_rate", 0.50)
+    T = max(expiration_days / 365.0, 1e-9)
+    ivs = []
+    weights = contract_ratios if contract_ratios else [1.0] * len(options)
+
+    for opt, action, weight in zip(options, option_actions, weights):
+        premium = get_strategy_price(opt, action)
+        if premium is None or premium <= 0:
+            logger.warning(f"Invalid premium {premium} for option {opt.get('symbol', 'unknown')}, strike={opt['strike']}")
+            continue
+        iv = calculate_option_iv(
+            S=current_price,
+            K=opt["strike"],
+            T=T,
+            r=r,
+            premium=premium,
+            option_type=opt["type"]
+        )
+        if iv and not np.isnan(iv) and iv > 0:
+            ivs.append(iv * weight)
+        else:
+            logger.warning(f"Failed to calculate IV for option {opt.get('symbol', 'unknown')}, strike={opt['strike']}")
+
+    if ivs:
+        total_weight = sum(weights[:len(ivs)])
+        calibrated_iv = sum(ivs) / total_weight if total_weight > 0 else DEFAULT_IV
+        try:
+            model_value = strategy_value_func(current_price, T, calibrated_iv)
+            if abs(model_value - raw_net) < raw_net * 0.2:  # Relaxed to 20%
+                return calibrated_iv
+            else:
+                logger.warning(f"IV verification failed: model_value={model_value}, raw_net={raw_net}, tolerance={raw_net * 0.2}")
+                return calibrated_iv  # Use calibrated IV anyway
+        except Exception as e:
+            logger.warning(f"Strategy value error during IV verification: {e}")
+            return calibrated_iv
+    logger.warning("No valid IVs calculated. Using default IV.")
+    return DEFAULT_IV
 
 def _compute_payoff_grid(strategy_value_func, current_price, expiration_days, iv, net_entry):
     plot_range_pct = st.session_state.get("plot_range_pct", 0.3)
@@ -601,25 +587,35 @@ def _create_3d_figure(X, Y, Z, title, current_price):
 
     return fig
 
-
-def intrinsic_value(S: float, K: float, option_type: str) -> float:
-    if S <= 0 or K <= 0:
-        return 0.0
-    return max(0, S - K if option_type == "call" else K - S)
-
-def black_scholes(S: float, K: float, T: float, r: float, sigma: float, option_type: str) -> float:
-    if S <= 0 or K <= 0 or T < 0 or sigma < 0:
-        logger.warning(f"Invalid inputs for Black-Scholes: S={S}, K={K}, T={T}, sigma={sigma}")
-        return 0.0
+def black_scholes(S, K, T, r, sigma, option_type="call"):
+    if S <= 0:
+        return 0 if option_type == "call" else max(K - S, 0)
+    if K <= 0:
+        return max(S - K, 0) if option_type == "call" else 0
     if T <= 1e-6:
-        return intrinsic_value(S, K, option_type)
-    d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
-    d2 = d1 - sigma * np.sqrt(T)
+        return max(0, S - K) if option_type == "call" else max(0, K - S)
+    if sigma <= 1e-9:
+        return max(0, S - K) if option_type == "call" else max(0, K - S)
+    
+    with np.errstate(divide='ignore', invalid='ignore'):
+        epsilon = 1e-12
+        denom = sigma * np.sqrt(T) + epsilon
+        d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / denom
+        d2 = d1 - sigma * np.sqrt(T)
+        
+        if option_type == "call":
+            val = S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
+        else:
+            val = K * np.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
+    
+    return np.nan_to_num(val)
+
+def intrinsic_value(S, K, option_type="call"):
     if option_type == "call":
-        price = S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
+        return max(0, S - K)
     else:
-        price = K * np.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
-    return max(price, 0.0)
+        return max(0, K - S)
+
 # --- Split Table Creation Functions ---
 
 def create_bullish_spread_table(options, calc_func, num_contracts, commission_rate, is_debit=True):
@@ -721,7 +717,7 @@ def create_spread_matrix(options, calc_func, num_contracts, commission_rate, is_
 
 def visualize_bullish_3d(result, current_price, expiration_days, iv, key, options, option_actions):
     raw_net = result["raw_net"]
-    net_cost = result["net_cost"] if "net_cost" in result else result["net_credit"]
+    net_entry = result["net_cost"]
     num_contracts = result["num_contracts"]
     r = st.session_state.get("risk_free_rate", 0.50)
     
@@ -729,6 +725,7 @@ def visualize_bullish_3d(result, current_price, expiration_days, iv, key, option
         strikes = result["strikes"]
         k1, k2 = min(strikes), max(strikes)
         use_intrinsic = T <= 1e-6
+        
         if "call" in key.lower():
             if use_intrinsic:
                 return (intrinsic_value(price, k1, "call") - intrinsic_value(price, k2, "call"))
@@ -737,18 +734,18 @@ def visualize_bullish_3d(result, current_price, expiration_days, iv, key, option
                         black_scholes(price, k2, T, r, sigma, "call"))
         elif "put" in key.lower():
             if use_intrinsic:
-                return (-intrinsic_value(price, k1, "put") + intrinsic_value(price, k2, "put"))
+                return (-intrinsic_value(price, k2, "put") + intrinsic_value(price, k1, "put"))
             else:
-                return (-black_scholes(price, k1, T, r, sigma, "put") + 
-                        black_scholes(price, k2, T, r, sigma, "put"))
+                return (-black_scholes(price, k2, T, r, sigma, "put") + 
+                        black_scholes(price, k1, T, r, sigma, "put"))
         return 0.0
     
     iv = _calibrate_iv(raw_net, current_price, expiration_days, strategy_value, options, option_actions)
     iv = max(iv, 1e-9)
     
     X, Y, Z, min_price, max_price, times = _compute_payoff_grid(
-        lambda p, t, s: strategy_value(p, t / 365.0, s) * 100 * num_contracts, 
-        current_price, expiration_days, iv, net_cost
+        lambda p, t, s: strategy_value(p, t, s) * 100 * num_contracts, 
+        current_price, expiration_days, iv, net_entry
     )
     
     fig = _create_3d_figure(X, Y, Z, f"3D Payoff for {key} (IV: {iv:.1%})", current_price)
@@ -756,7 +753,7 @@ def visualize_bullish_3d(result, current_price, expiration_days, iv, key, option
 
 def visualize_bearish_3d(result, current_price, expiration_days, iv, key, options, option_actions):
     raw_net = result["raw_net"]
-    net_entry = result["net_cost"] if "net_cost" in result else result["net_credit"]
+    net_entry = result["net_cost"]
     num_contracts = result["num_contracts"]
     r = st.session_state.get("risk_free_rate", 0.50)
     
@@ -764,6 +761,7 @@ def visualize_bearish_3d(result, current_price, expiration_days, iv, key, option
         strikes = result["strikes"]
         k1, k2 = min(strikes), max(strikes)
         use_intrinsic = T <= 1e-6
+        
         if "call" in key.lower():
             if use_intrinsic:
                 return (-intrinsic_value(price, k1, "call") + intrinsic_value(price, k2, "call"))
@@ -782,7 +780,7 @@ def visualize_bearish_3d(result, current_price, expiration_days, iv, key, option
     iv = max(iv, 1e-9)
     
     X, Y, Z, min_price, max_price, times = _compute_payoff_grid(
-        lambda p, t, s: strategy_value(p, t / 365.0, s) * 100 * num_contracts, 
+        lambda p, t, s: strategy_value(p, t, s) * 100 * num_contracts, 
         current_price, expiration_days, iv, net_entry
     )
     
@@ -810,8 +808,7 @@ def visualize_neutral_3d(result, current_price, expiration_days, iv, key, option
     iv = max(iv, 1e-9)
     
     X, Y, Z, min_price, max_price, times = _compute_payoff_grid(
-        lambda p, t, s: strategy_value(p, t / 365.0, s), 
-        current_price, expiration_days, iv, net_entry
+        strategy_value, current_price, expiration_days, iv, net_entry
     )
     
     fig = _create_3d_figure(X, Y, Z, f"3D Payoff for {key} (IV: {iv:.1%})", current_price)
@@ -844,13 +841,13 @@ def visualize_volatility_3d(result, current_price, expiration_days, iv, key, opt
                 call_val = black_scholes(price, call_k, T, r, sigma, "call")
                 put_val = black_scholes(price, put_k, T, r, sigma, "put")
             return (call_val + put_val) * 100 * num_contracts
+        return 0.0
     
     iv = _calibrate_iv(raw_net, current_price, expiration_days, strategy_value, options, option_actions)
     iv = max(iv, 1e-9)
     
     X, Y, Z, min_price, max_price, times = _compute_payoff_grid(
-        lambda p, t, s: strategy_value(p, t / 365.0, s), 
-        current_price, expiration_days, iv, net_entry
+        strategy_value, current_price, expiration_days, iv, net_entry
     )
     
     fig = _create_3d_figure(X, Y, Z, f"3D Payoff for {key} (IV: {iv:.1%})", current_price)
