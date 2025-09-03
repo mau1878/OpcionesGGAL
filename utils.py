@@ -671,60 +671,54 @@ def _calibrate_iv(target_price, spot, expiration_days, model_func, options, acti
     
     return max(iv, 1e-9)  # Ensure non-negative IV
 
-def estimate_breakeven_probability(options, actions, contracts, net_cost, T_years, sigma):
+logger = logging.getLogger(__name__)
+
+def estimate_breakeven_probability(options, actions, contracts, net_cost, T_years, sigma, num_simulations=10000):
     """
-    Estimate the probability of breaking even at expiration using a lognormal distribution.
+    Estimate the breakeven probability using Monte Carlo simulation.
     
     Args:
         options (list): List of option dictionaries
         actions (list): List of actions ("buy" or "sell")
         contracts (list): List of contract quantities
-        net_cost (float): Net cost or credit of the strategy
+        net_cost (float): Net cost of the strategy (positive for debit, negative for credit)
         T_years (float): Time to expiration in years
         sigma (float): Implied volatility
+        num_simulations (int): Number of Monte Carlo paths
     Returns:
-        float: Probability of P&L >= 0 at expiration
+        float: Probability of breakeven (0 to 1)
     """
-    import numpy as np
-    from scipy.stats import norm
-    def payoff_at_expiration(price):
-        return calculate_strategy_value(options, actions, contracts, price, 0, sigma) - net_cost
-
-    plot_range_pct = st.session_state.get('plot_range_pct', 0.5)
-    price_range = np.linspace(
-        st.session_state.current_price * (1 - plot_range_pct),
-        st.session_state.current_price * (1 + plot_range_pct), 200
-    )
-    payoffs = [payoff_at_expiration(p) for p in price_range]
-    breakeven_points = []
-    for i in range(1, len(payoffs)):
-        if payoffs[i-1] * payoffs[i] <= 0:
-            breakeven = price_range[i-1] + (price_range[i] - price_range[i-1]) * (-payoffs[i-1]) / (payoffs[i] - payoffs[i-1])
-            breakeven_points.append(breakeven)
-
-    if not breakeven_points:
+    if net_cost is None or T_years <= 0 or sigma <= 0 or not options:
+        logger.warning(f"Invalid inputs for breakeven probability: net_cost={net_cost}, T_years={T_years}, sigma={sigma}, options={len(options)}")
+        return 0.0
+    
+    S0 = st.session_state.get('current_price', 0.0)
+    if S0 <= 0:
+        logger.warning(f"Invalid spot price: {S0}")
         return 0.0
 
-    mu = np.log(st.session_state.current_price) + (st.session_state.risk_free_rate - 0.5 * sigma**2) * T_years
-    sigma_t = sigma * np.sqrt(T_years)
-    prob = 0.0
-    sorted_breakevens = sorted(breakeven_points)
-    for i in range(0, len(sorted_breakevens) + 1):
-        if i == 0:
-            lower = st.session_state.current_price * (1 - plot_range_pct)
-            upper = sorted_breakevens[0] if sorted_breakevens else st.session_state.current_price * (1 + plot_range_pct)
-        elif i == len(sorted_breakevens):
-            lower = sorted_breakevens[-1]
-            upper = st.session_state.current_price * (1 + plot_range_pct)
-        else:
-            lower = sorted_breakevens[i-1]
-            upper = sorted_breakevens[i]
-        mid_point = (lower + upper) / 2
-        if payoff_at_expiration(mid_point) >= 0:
-            lower_log = np.log(lower) if lower > 0 else -np.inf
-            upper_log = np.log(upper) if upper > 0 else np.inf
-            prob += norm.cdf((upper_log - mu) / sigma_t) - norm.cdf((lower_log - mu) / sigma_t)
-    return prob
+    # Simulate stock prices at expiration using geometric Brownian motion
+    dt = T_years
+    np.random.seed(42)  # For reproducibility
+    Z = np.random.normal(0, 1, num_simulations)
+    S_T = S0 * np.exp((st.session_state.get('risk_free_rate', 0.0) - 0.5 * sigma**2) * dt + sigma * np.sqrt(dt) * Z)
+    
+    # Calculate payoffs at expiration
+    def payoff_at_expiration(price):
+        return calculate_strategy_value(options, actions, contracts, price, 0, sigma) - net_cost
+    
+    payoffs = [payoff_at_expiration(p) for p in S_T]
+    
+    # For debit strategies (net_cost > 0), breakeven when payoff >= 0
+    # For credit strategies (net_cost < 0), breakeven when payoff >= 0 (i.e., keep the credit)
+    breakeven_count = sum(1 for p in payoffs if p >= 0)
+    probability = breakeven_count / num_simulations
+    
+    # Debugging: Log if probability is zero
+    if probability == 0:
+        logger.warning(f"Breakeven probability is zero. Net cost: {net_cost}, Sigma: {sigma}, Payoff range: {min(payoffs):.2f} to {max(payoffs):.2f}")
+    
+    return probability
 
 def calculate_strategy_value(options, actions, contracts, price, t, sigma):
     """
