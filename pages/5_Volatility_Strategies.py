@@ -74,7 +74,7 @@ with tab1:
     if not detailed_df_straddle.empty:
         # Apply formatting to the DataFrame
         edited_df = detailed_df_straddle.copy()
-        for col in ["net_cost", "max_profit", "max_loss", "lower_breakeven", "upper_breakeven"]:
+        for col in ["net_cost", "max_loss", "lower_breakeven", "upper_breakeven"]:
             edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}")
         edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: x)
 
@@ -137,7 +137,7 @@ with tab1:
         # Sort DataFrame
         if sort_by == "Breakeven Probability":
             edited_df['Breakeven Probability'] = edited_df.apply(
-                lambda row: norm.cdf((np.log(row['upper_breakeven'] / current_price) - risk_free_rate * expiration_days / 365.0) /
+                lambda row: norm.cdf((np.log(row['upper_breakeven'] / current_price) - risk_free_rate * expiration_days / 365.0) / 
                                      (st.session_state.iv * np.sqrt(expiration_days / 365.0))), axis=1
             )
             edited_df = edited_df.sort_values(by="Breakeven Probability", ascending=False)
@@ -181,7 +181,7 @@ with tab2:
     if not detailed_df_strangle.empty:
         # Apply formatting to the DataFrame
         edited_df = detailed_df_strangle.copy()
-        for col in ["net_cost", "max_loss", "lower_breakeven", "upper_breakeven"]:
+        for col in ["net_cost", "max_profit", "max_loss", "lower_breakeven", "upper_breakeven"]:
             edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}")
         edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: x)
 
@@ -248,7 +248,7 @@ with tab2:
         # Sort DataFrame
         if sort_by == "Breakeven Probability":
             edited_df['Breakeven Probability'] = edited_df.apply(
-                lambda row: norm.cdf((np.log(row['upper_breakeven'] / current_price) - risk_free_rate * expiration_days / 365.0) /
+                lambda row: norm.cdf((np.log(row['upper_breakeven'] / current_price) - risk_free_rate * expiration_days / 365.0) / 
                                      (st.session_state.iv * np.sqrt(expiration_days / 365.0))), axis=1
             )
             edited_df = edited_df.sort_values(by="Breakeven Probability", ascending=False)

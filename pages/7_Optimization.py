@@ -137,8 +137,8 @@ if optimal_strategy:
     st.session_state["optimal_strategy"] = optimal_strategy
     st.write("Estrategia Óptima Encontrada")
     options, actions, contracts, result = optimal_strategy["options"], optimal_strategy["actions"], optimal_strategy["contracts"], optimal_strategy["result"]
-    # Visualize (assume neutral for custom)
     result["num_contracts"] = sum(contracts)
+    # Visualize (assume neutral for custom)
     visualize_neutral_3d(result, current_price, expiration_days, st.session_state.iv, "Optimal Strategy", options, actions)
 else:
     st.warning("No optimal strategy found.")

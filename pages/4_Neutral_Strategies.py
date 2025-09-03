@@ -119,7 +119,7 @@ with tab1:
                                 result["contract_ratios"] = [1, -2, 1]
                                 visualize_neutral_3d(
                                     result, current_price, expiration_days, st.session_state.iv,
-                                    f"Call Butterfly {row['Strikes']}", 
+                                    f"Call Butterfly {row['Strikes']}",
                                     [long_low, short_mid, long_high], ["buy", "sell", "buy"]
                                 )
                                 logger.info("3D plot triggered successfully for Call Butterfly")
@@ -142,7 +142,7 @@ with tab1:
         # Sort DataFrame
         if sort_by == "Breakeven Probability":
             edited_df['Breakeven Probability'] = edited_df.apply(
-                lambda row: norm.cdf((np.log(row['upper_breakeven'] / current_price) - risk_free_rate * expiration_days / 365.0) / 
+                lambda row: norm.cdf((np.log(row['upper_breakeven'] / current_price) - risk_free_rate * expiration_days / 365.0) /
                                      (st.session_state.iv * np.sqrt(expiration_days / 365.0))), axis=1
             )
             edited_df = edited_df.sort_values(by="Breakeven Probability", ascending=False)
@@ -231,7 +231,7 @@ with tab2:
                                 result["contract_ratios"] = [1, -2, 1]
                                 visualize_neutral_3d(
                                     result, current_price, expiration_days, st.session_state.iv,
-                                    f"Put Butterfly {row['Strikes']}", 
+                                    f"Put Butterfly {row['Strikes']}",
                                     [long_high, short_mid, long_low], ["buy", "sell", "buy"]
                                 )
                                 logger.info("3D plot triggered successfully for Put Butterfly")
@@ -254,7 +254,7 @@ with tab2:
         # Sort DataFrame
         if sort_by == "Breakeven Probability":
             edited_df['Breakeven Probability'] = edited_df.apply(
-                lambda row: norm.cdf((np.log(row['upper_breakeven'] / current_price) - risk_free_rate * expiration_days / 365.0) / 
+                lambda row: norm.cdf((np.log(row['upper_breakeven'] / current_price) - risk_free_rate * expiration_days / 365.0) /
                                      (st.session_state.iv * np.sqrt(expiration_days / 365.0))), axis=1
             )
             edited_df = edited_df.sort_values(by="Breakeven Probability", ascending=False)
@@ -344,7 +344,7 @@ with tab3:
                                 result["contract_ratios"] = [1, -1, -1, 1]
                                 visualize_neutral_3d(
                                     result, current_price, expiration_days, st.session_state.iv,
-                                    f"Call Condor {row['Strikes']}", 
+                                    f"Call Condor {row['Strikes']}",
                                     [long_low, short_mid_low, short_mid_high, long_high], ["buy", "sell", "sell", "buy"]
                                 )
                                 logger.info("3D plot triggered successfully for Call Condor")
@@ -367,7 +367,7 @@ with tab3:
         # Sort DataFrame
         if sort_by == "Breakeven Probability":
             edited_df['Breakeven Probability'] = edited_df.apply(
-                lambda row: norm.cdf((np.log(row['upper_breakeven'] / current_price) - risk_free_rate * expiration_days / 365.0) / 
+                lambda row: norm.cdf((np.log(row['upper_breakeven'] / current_price) - risk_free_rate * expiration_days / 365.0) /
                                      (st.session_state.iv * np.sqrt(expiration_days / 365.0))), axis=1
             )
             edited_df = edited_df.sort_values(by="Breakeven Probability", ascending=False)
@@ -457,7 +457,7 @@ with tab4:
                                 result["contract_ratios"] = [1, -1, -1, 1]
                                 visualize_neutral_3d(
                                     result, current_price, expiration_days, st.session_state.iv,
-                                    f"Put Condor {row['Strikes']}", 
+                                    f"Put Condor {row['Strikes']}",
                                     [long_high, short_mid_high, short_mid_low, long_low], ["buy", "sell", "sell", "buy"]
                                 )
                                 logger.info("3D plot triggered successfully for Put Condor")
@@ -480,7 +480,7 @@ with tab4:
         # Sort DataFrame
         if sort_by == "Breakeven Probability":
             edited_df['Breakeven Probability'] = edited_df.apply(
-                lambda row: norm.cdf((np.log(row['upper_breakeven'] / current_price) - risk_free_rate * expiration_days / 365.0) / 
+                lambda row: norm.cdf((np.log(row['upper_breakeven'] / current_price) - risk_free_rate * expiration_days / 365.0) /
                                      (st.session_state.iv * np.sqrt(expiration_days / 365.0))), axis=1
             )
             edited_df = edited_df.sort_values(by="Breakeven Probability", ascending=False)
