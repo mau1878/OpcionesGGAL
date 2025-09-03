@@ -19,6 +19,30 @@ OPTIONS_URL = "https://data912.com/live/arg_options"
 DEFAULT_IV = 0.30
 MIN_GAP = 0.01
 
+def get_third_friday(year: int, month: int) -> date:
+    try:
+        first_day = date(year, month, 1)
+        first_friday = first_day + timedelta(days=(4 - first_day.weekday() + 7) % 7)
+        return first_friday + timedelta(days=14)
+    except ValueError:
+        return None
+
+year = date.today().year
+EXPIRATION_MAP_2025 = {
+    "E": get_third_friday(year, 1), "EN": get_third_friday(year, 1),
+    "F": get_third_friday(year, 2), "FE": get_third_friday(year, 2),
+    "M": get_third_friday(year, 3), "MZ": get_third_friday(year, 3),
+    "A": get_third_friday(year, 4), "AB": get_third_friday(year, 4),
+    "MY": get_third_friday(year, 5),
+    "J": get_third_friday(year, 6), "JN": get_third_friday(year, 6),
+    "JL": get_third_friday(year, 7),
+    "AG": get_third_friday(year, 8),
+    "S": get_third_friday(year, 9), "SE": get_third_friday(year, 9),
+    "O": get_third_friday(year, 10), "OC": get_third_friday(year, 10),
+    "N": get_third_friday(year, 11), "NO": get_third_friday(year, 11),
+    "D": get_third_friday(year, 12), "DI": get_third_friday(year, 12),
+}
+
 @st.cache_data(ttl=300)
 def fetch_data(url: str) -> list:
     session = requests.Session()
@@ -44,29 +68,7 @@ def fetch_data(url: str) -> list:
     finally:
         session.close()
 
-def get_third_friday(year: int, month: int) -> date:
-    try:
-        first_day = date(year, month, 1)
-        first_friday = first_day + timedelta(days=(4 - first_day.weekday() + 7) % 7)
-        return first_friday + timedelta(days=14)
-    except ValueError:
-        return None
 
-year = date.today().year
-EXPIRATION_MAP_2025 = {
-    "E": get_third_friday(year, 1), "EN": get_third_friday(year, 1),
-    "F": get_third_friday(year, 2), "FE": get_third_friday(year, 2),
-    "M": get_third_friday(year, 3), "MZ": get_third_friday(year, 3),
-    "A": get_third_friday(year, 4), "AB": get_third_friday(year, 4),
-    "MY": get_third_friday(year, 5),
-    "J": get_third_friday(year, 6), "JN": get_third_friday(year, 6),
-    "JL": get_third_friday(year, 7),
-    "AG": get_third_friday(year, 8),
-    "S": get_third_friday(year, 9), "SE": get_third_friday(year, 9),
-    "O": get_third_friday(year, 10), "OC": get_third_friday(year, 10),
-    "N": get_third_friday(year, 11), "NO": get_third_friday(year, 11),
-    "D": get_third_friday(year, 12), "DI": get_third_friday(year, 12),
-}
 
 
 
