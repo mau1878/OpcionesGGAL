@@ -4,7 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 import logging
 from itertools import combinations, product
-from calc_utils import black_scholes, intrinsic_value, _calculate_iv, calculate_fees
+from calc_utils import black_scholes, intrinsic_value, _calibrate_iv, calculate_fees
 
 logger = logging.getLogger(__name__)
 
