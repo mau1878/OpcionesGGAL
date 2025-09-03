@@ -134,78 +134,111 @@ def calculate_fees(base_cost: float, commission_rate: float) -> float:
 
 # --- Strategy Calculation Functions ---
 
-def calculate_bull_call_spread(options: list, actions: list, contracts: list, commission_rate: float) -> dict:
-    if len(options) != 2 or options[0]["type"] != "call" or options[1]["type"] != "call":
-        return None
-    net_cost = calculate_strategy_cost(options, actions, contracts)
-    if net_cost is None:
-        return None
-    k1, k2 = options[0]["strike"], options[1]["strike"]
-    max_profit = (k2 - k1 - net_cost / (100 * contracts[0])) * 100 * contracts[0]
+def calculate_bull_call_spread(long_opt, short_opt, num_contracts, commission_rate):
+    if long_opt["strike"] >= short_opt["strike"]: return None
+    long_price = get_strategy_price(long_opt, "buy")
+    short_price = get_strategy_price(short_opt, "sell")
+    if any(p is None for p in [long_price, short_price]): return None
+
+    long_base = long_price * 100 * num_contracts
+    short_base = short_price * 100 * num_contracts
+    base_cost = (long_price - short_price) * 100 * num_contracts
+    total_fees = calculate_fees(long_base, commission_rate) + calculate_fees(short_base, commission_rate)
+    net_cost = base_cost + total_fees
+
     max_loss = net_cost
-    breakeven = k1 + net_cost / (100 * contracts[0])
-    T = st.session_state.get("expiration_days", 30) / 365.0
-    iv = _calibrate_iv(net_cost / (100 * contracts[0]), st.session_state.get("current_price", 100.0), st.session_state.get("expiration_days", 30),
-                       lambda p, t, s: black_scholes(p, k1, t, st.session_state.get("risk_free_rate", 0.50), s, "call") -
-                       black_scholes(p, k2, t, st.session_state.get("risk_free_rate", 0.50), s, "call"), options, actions)
-    breakeven_prob = estimate_breakeven_probability(options, actions, contracts, net_cost, T, iv)
-    return {"net_cost": net_cost, "max_profit": max_profit, "max_loss": max_loss, "breakeven": breakeven, "breakeven_prob": breakeven_prob}
+    max_profit = (short_opt["strike"] - long_opt["strike"]) * 100 * num_contracts - net_cost
+    breakeven = long_opt["strike"] + (net_cost / (100 * num_contracts))
 
-def calculate_bull_put_spread(options: list, actions: list, contracts: list, commission_rate: float) -> dict:
-    if len(options) != 2 or options[0]["type"] != "put" or options[1]["type"] != "put":
-        return None
-    net_cost = calculate_strategy_cost(options, actions, contracts)
-    if net_cost is None:
-        return None
-    k1, k2 = options[0]["strike"], options[1]["strike"]
-    max_profit = -net_cost
-    max_loss = (k2 - k1) * 100 * contracts[0] + net_cost
-    breakeven = k2 + net_cost / (100 * contracts[0])
-    T = st.session_state.get("expiration_days", 30) / 365.0
-    iv = _calibrate_iv(-net_cost / (100 * contracts[0]), st.session_state.get("current_price", 100.0), st.session_state.get("expiration_days", 30),
-                       lambda p, t, s: black_scholes(p, k2, t, st.session_state.get("risk_free_rate", 0.50), s, "put") -
-                       black_scholes(p, k1, t, st.session_state.get("risk_free_rate", 0.50), s, "put"), options, actions)
-    breakeven_prob = estimate_breakeven_probability(options, actions, contracts, net_cost, T, iv)
-    return {"net_cost": net_cost, "max_profit": max_profit, "max_loss": max_loss, "breakeven": breakeven, "breakeven_prob": breakeven_prob}
+    return {
+        "raw_net": base_cost,
+        "net_cost": net_cost,
+        "max_profit": max_profit,
+        "max_loss": max_loss,
+        "strikes": [long_opt["strike"], short_opt["strike"]],
+        "num_contracts": num_contracts,
+        "breakeven": breakeven
+    }
 
-def calculate_bear_call_spread(options: list, actions: list, contracts: list, commission_rate: float) -> dict:
-    if len(options) != 2 or options[0]["type"] != "call" or options[1]["type"] != "call":
-        return None
-    net_cost = calculate_strategy_cost(options, actions, contracts)
-    if net_cost is None:
-        return None
-    k1, k2 = options[0]["strike"], options[1]["strike"]
-    max_profit = -net_cost
-    max_loss = (k2 - k1) * 100 * contracts[0] + net_cost
-    breakeven = k1 - net_cost / (100 * contracts[0])
-    T = st.session_state.get("expiration_days", 30) / 365.0
-    iv = _calibrate_iv(-net_cost / (100 * contracts[0]), st.session_state.get("current_price", 100.0), st.session_state.get("expiration_days", 30),
-                       lambda p, t, s: black_scholes(p, k1, t, st.session_state.get("risk_free_rate", 0.50), s, "call") -
-                       black_scholes(p, k2, t, st.session_state.get("risk_free_rate", 0.50), s, "call"), options, actions)
-    breakeven_prob = estimate_breakeven_probability(options, actions, contracts, net_cost, T, iv)
-    return {"net_cost": net_cost, "max_profit": max_profit, "max_loss": max_loss, "breakeven": breakeven, "breakeven_prob": breakeven_prob}
+def calculate_bull_put_spread(short_opt, long_opt, num_contracts, commission_rate):
+    if short_opt["strike"] <= long_opt["strike"]: return None
+    short_price = get_strategy_price(short_opt, "sell")
+    long_price = get_strategy_price(long_opt, "buy")
+    if any(p is None for p in [short_price, long_price]): return None
 
-def calculate_bear_put_spread(options: list, actions: list, contracts: list, commission_rate: float) -> dict:
-    if len(options) != 2 or options[0]["type"] != "put" or options[1]["type"] != "put":
-        return None
-    net_cost = calculate_strategy_cost(options, actions, contracts)
-    if net_cost is None:
-        return None
-    k1, k2 = options[0]["strike"], options[1]["strike"]
-    max_profit = (k1 - k2 - net_cost / (100 * contracts[0])) * 100 * contracts[0]
+    short_base = short_price * 100 * num_contracts
+    long_base = long_price * 100 * num_contracts
+    base_credit = (short_price - long_price) * 100 * num_contracts
+    if base_credit <= 0: return None
+    total_fees = calculate_fees(short_base, commission_rate) + calculate_fees(long_base, commission_rate)
+    net_credit = base_credit - total_fees
+
+    max_profit = net_credit
+    max_loss = (short_opt["strike"] - long_opt["strike"]) * 100 * num_contracts - net_credit
+    breakeven = short_opt["strike"] - (net_credit / (100 * num_contracts))
+
+    return {
+        "raw_net": -base_credit,
+        "net_cost": -net_credit,
+        "max_profit": max_profit,
+        "max_loss": max_loss,
+        "strikes": [long_opt["strike"], short_opt["strike"]],
+        "num_contracts": num_contracts,
+        "breakeven": breakeven
+    }
+
+def calculate_bear_call_spread(short_opt, long_opt, num_contracts, commission_rate):
+    if short_opt["strike"] >= long_opt["strike"]: return None
+    short_price = get_strategy_price(short_opt, "sell")
+    long_price = get_strategy_price(long_opt, "buy")
+    if any(p is None for p in [short_price, long_price]): return None
+
+    short_base = short_price * 100 * num_contracts
+    long_base = long_price * 100 * num_contracts
+    base_credit = (short_price - long_price) * 100 * num_contracts
+    if base_credit <= 0: return None
+    total_fees = calculate_fees(short_base, commission_rate) + calculate_fees(long_base, commission_rate)
+    net_credit = base_credit - total_fees
+
+    max_profit = net_credit
+    max_loss = (long_opt["strike"] - short_opt["strike"]) * 100 * num_contracts - net_credit
+    breakeven = short_opt["strike"] + (net_credit / (100 * num_contracts))
+
+    return {
+        "raw_net": -base_credit,
+        "net_cost": -net_credit,
+        "max_profit": max_profit,
+        "max_loss": max_loss,
+        "strikes": [short_opt["strike"], long_opt["strike"]],
+        "num_contracts": num_contracts,
+        "breakeven": breakeven
+    }
+
+def calculate_bear_put_spread(long_opt, short_opt, num_contracts, commission_rate):
+    if long_opt["strike"] <= short_opt["strike"]: return None
+    long_price = get_strategy_price(long_opt, "buy")
+    short_price = get_strategy_price(short_opt, "sell")
+    if any(p is None for p in [long_price, short_price]): return None
+
+    long_base = long_price * 100 * num_contracts
+    short_base = short_price * 100 * num_contracts
+    base_cost = (long_price - short_price) * 100 * num_contracts
+    total_fees = calculate_fees(long_base, commission_rate) + calculate_fees(short_base, commission_rate)
+    net_cost = base_cost + total_fees
+
     max_loss = net_cost
-    breakeven = k1 - net_cost / (100 * contracts[0])
-    T = st.session_state.get("expiration_days", 30) / 365.0
-    iv = _calibrate_iv(net_cost / (100 * contracts[0]), st.session_state.get("current_price", 100.0), st.session_state.get("expiration_days", 30),
-                       lambda p, t, s: black_scholes(p, k1, t, st.session_state.get("risk_free_rate", 0.50), s, "put") -
-                       black_scholes(p, k2, t, st.session_state.get("risk_free_rate", 0.50), s, "put"), options, actions)
-    breakeven_prob = estimate_breakeven_probability(options, actions, contracts, net_cost, T, iv)
-    return {"net_cost": net_cost, "max_profit": max_profit, "max_loss": max_loss, "breakeven": breakeven, "breakeven_prob": breakeven_prob}
+    max_profit = (long_opt["strike"] - short_opt["strike"]) * 100 * num_contracts - net_cost
+    breakeven = long_opt["strike"] - (net_cost / (100 * num_contracts))
 
-def calculate_potential_metrics(options: list, actions: list, contracts: list, min_price: float, max_price: float, net_cost: float, iv: float) -> float:
-    prices = np.linspace(min_price, max_price, 100)
-    payoffs = [calculate_strategy_value(options, actions, contracts, p, 0, iv) - net_cost for p in prices]
-    return max(max(payoffs), 0.0)
+    return {
+        "raw_net": base_cost,
+        "net_cost": net_cost,
+        "max_profit": max_profit,
+        "max_loss": max_loss,
+        "strikes": [short_opt["strike"], long_opt["strike"]],
+        "num_contracts": num_contracts,
+        "breakeven": breakeven
+    }
 
 def calculate_call_butterfly(long_low, short_mid, long_high, num_contracts, commission_rate):
     if not (long_low["strike"] < short_mid["strike"] < long_high["strike"]): return None
@@ -481,83 +514,91 @@ def _calibrate_iv(raw_net: float, current_price: float, expiration_days: float, 
         logger.warning(f"IV calibration exception: {e}")
         return DEFAULT_IV
 
-logger = logging.getLogger(__name__)
-
-def estimate_breakeven_probability(options: list, actions: list, contracts: list, net_cost: float, T: float, iv: float) -> float:
-    if len(options) != len(actions) or len(options) != len(contracts):
-        return 0.0
-    r = st.session_state.get("risk_free_rate", 0.50)
-    S = st.session_state.get("current_price", 100.0)
-    min_price = S * 0.5
-    max_price = S * 1.5
-    def payoff(p): return calculate_strategy_value(options, actions, contracts, p, 0, iv) - net_cost
-    prices = np.linspace(min_price, max_price, 100)
-    payoffs = [payoff(p) for p in prices]
-    prob = 0.0
-    for i in range(len(prices) - 1):
-        if payoffs[i] * payoffs[i + 1] <= 0:
-            d1 = (np.log(prices[i] / S) + (r + 0.5 * iv ** 2) * T) / (iv * np.sqrt(T))
-            prob += norm.cdf(d1)
-    return min(prob, 1.0)
-
-def calculate_strategy_value(options: list, actions: list, contracts: list, S: float, T: float, sigma: float) -> float:
-    if len(options) != len(actions) or len(options) != len(contracts):
-        return 0.0
-    total_value = 0.0
-    r = st.session_state.get("risk_free_rate", 0.50)
-    for opt, action, num in zip(options, actions, contracts):
-        price = black_scholes(S, opt["strike"], T / 365.0, r, sigma, opt["type"]) if T > 0 else intrinsic_value(S, opt["strike"], opt["type"])
-        total_value += price * num * (1 if action == "buy" else -1)
-    return total_value * 100
-
-
-
-def has_limited_loss(options: list, actions: list, contracts: list) -> bool:
-    if len(options) != len(actions) or len(options) != len(contracts):
-        return False
-    net_exposure = {"call": {}, "put": {}}
-    for opt, action, num in zip(options, actions, contracts):
-        if opt["type"] not in net_exposure:
-            return False
-        strike = opt["strike"]
-        qty = num if action == "buy" else -num
-        net_exposure[opt["type"]][strike] = net_exposure[opt["type"]].get(strike, 0) + qty
-    for opt_type in ["call", "put"]:
-        strikes = sorted(net_exposure[opt_type].keys())
-        net_qty = 0
-        for strike in strikes:
-            net_qty += net_exposure[opt_type][strike]
-            if opt_type == "call" and net_qty < 0 and strike != max(strikes):
-                return False
-            if opt_type == "put" and net_qty < 0 and strike != min(strikes):
-                return False
-    return True
-def _compute_payoff_grid(strategy_value: callable, current_price: float, expiration_days: float, iv: float, net_cost: float):
-    min_price = current_price * (1 - st.session_state.get("plot_range_pct", 0.5))
-    max_price = current_price * (1 + st.session_state.get("plot_range_pct", 0.5))
-    times = np.linspace(0, expiration_days, 50)  # Reduced from 100
-    prices = np.linspace(min_price, max_price, 50)  # Reduced from 100
+def _compute_payoff_grid(strategy_value_func, current_price, expiration_days, iv, net_entry):
+    plot_range_pct = st.session_state.get("plot_range_pct", 0.3)
+    min_price = max(0.1, current_price * (1 - plot_range_pct))
+    max_price = current_price * (1 + plot_range_pct)
+    
+    prices = np.linspace(min_price, max_price, 50)
+    times = np.linspace(0, expiration_days, 20)
     X, Y = np.meshgrid(prices, times)
     Z = np.zeros_like(X)
-    for i in range(X.shape[0]):
-        for j in range(X.shape[1]):
-            Z[i, j] = strategy_value(X[i, j], Y[i, j], iv) - (net_cost if Y[i, j] == 0 else 0)
+
+    for i in range(len(times)):
+        for j in range(len(prices)):
+            price = X[i, j]
+            T = max((expiration_days - Y[i, j]) / 365.0, 1e-9)
+            try:
+                Z[i, j] = strategy_value_func(price, T, iv) - net_entry
+            except Exception as e:
+                logger.warning(f"Error computing payoff at price={price}, T={T}: {e}")
+                Z[i, j] = 0
     return X, Y, Z, min_price, max_price, times
 
-def _create_3d_figure(X: np.ndarray, Y: np.ndarray, Z: np.ndarray, title: str, current_price: float):
-    fig = go.Figure(data=[go.Surface(x=X, y=Y, z=Z, colorscale="Viridis")])
+def _create_3d_figure(X, Y, Z, title, current_price):
+    # Estimate z-axis range for the zero-profit plane and current price plane
+    z_min = np.min(Z) * 1.1 if np.min(Z) < 0 else -np.max(Z) * 0.1
+    z_max = np.max(Z) * 1.1 if np.max(Z) > 0 else -np.min(Z) * 0.1
+    
+    # Blue plane at z=0 (profit/loss = 0)
+    z_zero = np.zeros_like(X)
+    blue_plane = go.Surface(
+        x=X, y=Y, z=z_zero,
+        colorscale=[[0, 'rgba(0, 0, 255, 0.2)'], [1, 'rgba(0, 0, 255, 0.2)']],
+        showscale=False,
+        name="Zero Profit/Loss"
+    )
+    
+    # Red plane at x=current_price using Mesh3d
+    y_min, y_max = np.min(Y), np.max(Y)
+    # Define vertices for the rectangle plane
+    vertices = [
+        [current_price, y_min, z_min],
+        [current_price, y_max, z_min],
+        [current_price, y_min, z_max],
+        [current_price, y_max, z_max]
+    ]
+    # Define triangles for the plane
+    i = [0, 0]
+    j = [1, 2]
+    k = [2, 3]
+    red_plane = go.Mesh3d(
+        x=[v[0] for v in vertices],
+        y=[v[1] for v in vertices],
+        z=[v[2] for v in vertices],
+        i=i,
+        j=j,
+        k=k,
+        opacity=0.2,
+        color='red',
+        flatshading=True,
+        name="Current GGAL Price"
+    )
+    
+    # Main payoff surface
+    payoff_surface = go.Surface(
+        x=X, y=Y, z=Z,
+        colorscale='RdYlGn',
+        showscale=True,
+        name="Payoff Surface"
+    )
+    
+    fig = go.Figure(data=[payoff_surface, blue_plane, red_plane])
+    
     fig.update_layout(
         title=title,
         scene=dict(
-            xaxis_title="Precio de GGAL (ARS)",
-            yaxis_title="Días hasta el Vencimiento",
-            zaxis_title="P&L (ARS)",
-            xaxis=dict(tickvals=[X.min(), current_price, X.max()], ticktext=[f"{X.min():.2f}", f"{current_price:.2f}", f"{X.max():.2f}"]),
-            yaxis=dict(autorange="reversed"),
-            zaxis=dict(zeroline=True, zerolinecolor="black", zerolinewidth=2)
+            xaxis_title="Underlying Price",
+            yaxis_title="Days from Now",
+            zaxis_title="Profit / Loss",
+            camera=dict(eye=dict(x=1.5, y=1.5, z=1.5))
         ),
-        height=600
+        autosize=False,  # Disable autosize to use custom dimensions
+        width=800,      # Set desired width in pixels
+        height=600,     # Set desired height in pixels
+        margin=dict(l=65, r=50, b=65, t=90),
     )
+
     return fig
 
 
@@ -581,55 +622,39 @@ def black_scholes(S: float, K: float, T: float, r: float, sigma: float, option_t
     return max(price, 0.0)
 # --- Split Table Creation Functions ---
 
-def create_bullish_spread_table(options: list, calculate_spread: callable, num_contracts: int, commission_rate: float, is_debit: bool = True) -> pd.DataFrame:
-    results = []
-    for i, long_opt in enumerate(options):
-        for short_opt in options[i + 1:]:
-            if long_opt["strike"] >= short_opt["strike"]:
-                continue
-            options_pair = [long_opt, short_opt]
-            actions = ["buy", "sell"]
-            contracts = [num_contracts, num_contracts]
-            metrics = calculate_spread(options_pair, actions, contracts, commission_rate)
-            if metrics:
-                results.append({
-                    "Long Strike": long_opt["strike"],
-                    "Short Strike": short_opt["strike"],
-                    "Strikes": f"{long_opt['strike']}-{short_opt['strike']}",
-                    "Net Cost" if is_debit else "Net Credit": metrics["net_cost"],
-                    "Max Profit": metrics["max_profit"],
-                    "Max Loss": metrics["max_loss"],
-                    "Breakeven": metrics["breakeven"],
-                    "Breakeven Probability": metrics["breakeven_prob"],
-                    "Cost-to-Profit Ratio": abs(metrics["net_cost"] / metrics["max_profit"]) if metrics["max_profit"] > 0 else float('inf'),
-                    "raw_net": metrics["net_cost"]
-                })
-    return pd.DataFrame(results)
+def create_bullish_spread_table(options, calc_func, num_contracts, commission_rate, is_debit=True):
+    data = []
+    options_sorted = sorted(options, key=lambda o: o["strike"])
+    for long_opt, short_opt in combinations(options_sorted, 2):
+        result = calc_func(long_opt, short_opt, num_contracts, commission_rate) if is_debit else calc_func(short_opt, long_opt, num_contracts, commission_rate)
+        if result:
+            row = {
+                "Net Cost" if is_debit else "Net Credit": result["net_cost"] if is_debit else -result["net_cost"],
+                "Max Profit": result["max_profit"],
+                "Max Loss": result["max_loss"],
+                "Cost-to-Profit Ratio": result["max_loss"] / result["max_profit"] if result["max_profit"] > 0 else float('inf'),
+                "Breakeven": result["breakeven"]
+            }
+            data.append(((long_opt["strike"], short_opt["strike"]), row))
+    df = pd.DataFrame.from_dict(dict(data), orient='index') if data else pd.DataFrame()
+    return df
 
-def create_bearish_spread_table(options: list, calculate_spread: callable, num_contracts: int, commission_rate: float, is_debit: bool = False) -> pd.DataFrame:
-    results = []
-    for i, long_opt in enumerate(options):
-        for short_opt in options[i + 1:]:
-            if long_opt["strike"] <= short_opt["strike"]:
-                continue
-            options_pair = [long_opt, short_opt]
-            actions = ["buy", "sell"]
-            contracts = [num_contracts, num_contracts]
-            metrics = calculate_spread(options_pair, actions, contracts, commission_rate)
-            if metrics:
-                results.append({
-                    "Long Strike": long_opt["strike"],
-                    "Short Strike": short_opt["strike"],
-                    "Strikes": f"{long_opt['strike']}-{short_opt['strike']}",
-                    "Net Cost" if is_debit else "Net Credit": metrics["net_cost"],
-                    "Max Profit": metrics["max_profit"],
-                    "Max Loss": metrics["max_loss"],
-                    "Breakeven": metrics["breakeven"],
-                    "Breakeven Probability": metrics["breakeven_prob"],
-                    "Cost-to-Profit Ratio": abs(metrics["net_cost"] / metrics["max_profit"]) if metrics["max_profit"] > 0 else float('inf'),
-                    "raw_net": metrics["net_cost"]
-                })
-    return pd.DataFrame(results)
+def create_bearish_spread_table(options, calc_func, num_contracts, commission_rate, is_debit=True):
+    data = []
+    options_sorted = sorted(options, key=lambda o: o["strike"])
+    for short_opt, long_opt in combinations(options_sorted, 2):
+        result = calc_func(short_opt, long_opt, num_contracts, commission_rate) if not is_debit else calc_func(long_opt, short_opt, num_contracts, commission_rate)
+        if result:
+            row = {
+                "Net Credit" if not is_debit else "Net Cost": -result["net_cost"] if not is_debit else result["net_cost"],
+                "Max Profit": result["max_profit"],
+                "Max Loss": result["max_loss"],
+                "Cost-to-Profit Ratio": result["max_loss"] / result["max_profit"] if result["max_profit"] > 0 else float('inf'),
+                "Breakeven": result["breakeven"]
+            }
+            data.append(((short_opt["strike"], long_opt["strike"]), row))
+    df = pd.DataFrame.from_dict(dict(data), orient='index') if data else pd.DataFrame()
+    return df
 
 def create_neutral_table(options, calc_func, num_contracts, commission_rate, num_legs):
     data = []

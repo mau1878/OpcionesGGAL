@@ -88,14 +88,12 @@ st.caption(f"Última actualización: {st.session_state.last_updated}")
 st.sidebar.header("Configuración de Análisis")
 expirations = sorted(list(set(
     o["expiration"] for o in ggal_options 
-    if o["expiration"] is not None and o["expiration"] > date.today()
+    if o["expiration"] is not None and o["expiration"] >= date.today()
 )))
-if not expirations:
-    st.error("No hay fechas de vencimiento futuras disponibles. Intente actualizar los datos.")
-    st.stop()
 
 default_exp = date(2025, 10, 17)
-default_index = expirations.index(default_exp) if default_exp in expirations else 0
+default_index = expirations.index(default_exp) if default_exp in expirations else (1 if len(expirations) > 1 else 0)
+
 st.session_state.selected_exp = st.sidebar.selectbox(
     "Selecciona la fecha de vencimiento",
     expirations,
@@ -105,7 +103,6 @@ st.session_state.selected_exp = st.sidebar.selectbox(
 
 st.session_state.num_contracts = st.sidebar.number_input("Número de contratos", min_value=1, value=1, step=1)
 st.session_state.commission_rate = st.sidebar.number_input("Comisión (%)", min_value=0.0, value=0.5, step=0.1) / 100
-st.session_state.bid_ask_spread_threshold = st.sidebar.number_input("Umbral de Spread Bid-Ask (%)", min_value=10.0, value=50.0, step=5.0) / 100
 st.sidebar.caption("Las tarifas son estimaciones; las reales pueden variar.")
 st.session_state.risk_free_rate = get_risk_free_rate()
 st.session_state.iv = utils.DEFAULT_IV
