@@ -131,6 +131,7 @@ with tab1:
         st.session_state["straddle_df"] = edited_df.copy()
 
         # Sync visualize flags to DataFrame
+        
         for idx in range(len(edited_df)):
             edited_df.at[idx, 'Visualize'] = st.session_state["visualize_flags_straddle"][idx]
 
@@ -159,7 +160,8 @@ with tab1:
             width='stretch'
         )
         # Update flags after edit
-        for idx in range(len(edited_df)):
+        # Update flags after edit
+        for idx in edited_df.index:
             st.session_state["visualize_flags_straddle"][idx] = edited_df.at[idx, 'Visualize']
     else:
         st.warning("No hay datos disponibles para Straddle. Asegúrese de que hay suficientes opciones call y put.")
@@ -181,7 +183,7 @@ with tab2:
     if not detailed_df_strangle.empty:
         # Apply formatting to the DataFrame
         edited_df = detailed_df_strangle.copy()
-        for col in ["net_cost", "max_profit", "max_loss", "lower_breakeven", "upper_breakeven"]:
+        for col in ["net_cost", "max_loss", "lower_breakeven", "upper_breakeven"]:
             edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}")
         edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: x)
 
@@ -207,6 +209,7 @@ with tab2:
             edited = st.session_state.get("strangle_editor", {})
             edited_rows = edited.get('edited_rows', {})
             edited_df_local = st.session_state.get("strangle_df", edited_df)
+            
             for idx in edited_rows:
                 if isinstance(idx, int) and 0 <= idx < len(edited_df_local):
                     row = edited_df_local.iloc[idx]
@@ -270,7 +273,8 @@ with tab2:
             width='stretch'
         )
         # Update flags after edit
-        for idx in range(len(edited_df)):
+        # Update flags after edit
+        for idx in edited_df.index:
             st.session_state["visualize_flags_strangle"][idx] = edited_df.at[idx, 'Visualize']
     else:
         st.warning("No hay datos disponibles para Strangle. Asegúrese de que hay suficientes opciones call y put.")
