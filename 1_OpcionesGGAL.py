@@ -11,9 +11,11 @@ import logging
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
-# utils module content
-logging.basicConfig(level=logging.INFO)
+# Logging setup
+logging.basicConfig(level=logging.DEBUG, filename='debug.log', format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# utils module content
 STOCK_URL = "https://data912.com/live/arg_stocks"
 OPTIONS_URL = "https://data912.com/live/arg_options"
 DEFAULT_IV = 0.30
@@ -100,6 +102,7 @@ def get_ggal_data() -> tuple[dict | None, list]:
     if not ggal_stock:
         logger.error("GGAL stock data not found")
         return None, []
+    logger.info(f"ggal_stock: {ggal_stock}")
     ggal_options = []
     for o in options_data:
         px_bid = o.get("px_bid")
@@ -110,10 +113,9 @@ def get_ggal_data() -> tuple[dict | None, list]:
             continue
         opt_type, strike, exp = parse_option_symbol(o["symbol"])
         if all([opt_type, strike, exp]):
-            ggal_options.append({
-                "symbol": o["symbol"], "type": opt_type, "strike": strike,
-                "expiration": exp, "px_bid": px_bid, "px_ask": px_ask
-            })
+            option = {"symbol": o["symbol"], "type": opt_type, "strike": strike, "expiration": exp, "px_bid": px_bid, "px_ask": px_ask}
+            ggal_options.append(option)
+            logger.info(f"Option added: {option}")
         else:
             logger.debug(f"Skipped option {o['symbol']}: Invalid data")
     return ggal_stock, ggal_options
@@ -182,8 +184,17 @@ def get_risk_free_rate():
 # QuantLib option pricing
 def calculate_option_price(option: Dict, spot_price: float, risk_free_rate: float, volatility: float, eval_date: date, expiration_date: date) -> float:
     try:
+        logger.debug(f"Calculating option price: symbol={option['symbol']}, strike={option['strike']}, spot={spot_price}, eval_date={eval_date}, expiration={expiration_date}, risk_free={risk_free_rate}, vol={volatility}")
         evaluation_date = ql.Date(eval_date.day, eval_date.month, eval_date.year)
         expiration = ql.Date(expiration_date.day, expiration_date.month, expiration_date.year)
+        if evaluation_date >= expiration:
+            logger.debug("Evaluation date is on or after expiration; using intrinsic value")
+            strike = float(option['strike'])
+            if option['type'].lower() == 'call':
+                return max(spot_price - strike, 0)
+            else:  # put
+                return max(strike - spot_price, 0)
+
         ql.Settings.instance().evaluationDate = evaluation_date
 
         strike = float(option['strike'])
@@ -191,17 +202,21 @@ def calculate_option_price(option: Dict, spot_price: float, risk_free_rate: floa
         payoff = ql.PlainVanillaPayoff(option_type, strike)
         exercise = ql.EuropeanExercise(expiration)
 
-        spot = ql.QuoteHandle(ql.SimpleQuote(float(spot_price)))  # Ensure scalar input
-        risk_free = ql.YieldTermStructureHandle(ql.FlatForward(evaluation_date, risk_free_rate, ql.Actual360()))
-        volatility = ql.BlackVolTermStructureHandle(ql.BlackConstantVol(evaluation_date, ql.NullCalendar(), volatility, ql.Actual360()))
-        dividend_yield = ql.YieldTermStructureHandle(ql.FlatForward(evaluation_date, 0.0, ql.Actual360()))
+        spot = ql.QuoteHandle(ql.SimpleQuote(float(spot_price)))
+        risk_free = ql.YieldTermStructureHandle(ql.FlatForward(evaluation_date, risk_free_rate, ql.Actual365Fixed()))
+        volatility_handle = ql.BlackVolTermStructureHandle(ql.BlackConstantVol(evaluation_date, ql.NullCalendar(), volatility, ql.Actual365Fixed()))
+        dividend_yield = ql.YieldTermStructureHandle(ql.FlatForward(evaluation_date, 0.0, ql.Actual365Fixed()))
 
-        process = ql.BlackScholesProcess(spot, dividend_yield, risk_free, volatility)
+        logger.debug(f"BlackScholesProcess inputs: spot={spot_price}, strike={strike}, risk_free={risk_free_rate}, volatility={volatility}")
+        process = ql.BlackScholesProcess(spot, dividend_yield, risk_free, volatility_handle)
         option = ql.VanillaOption(payoff, exercise)
         option.setPricingEngine(ql.AnalyticEuropeanEngine(process))
-        return option.NPV()
+        price = option.NPV()
+        logger.debug(f"Calculated price: {price}")
+        return price
     except Exception as e:
-        st.warning(f"Error calculating price for strike {option['strike']}: {e}")
+        logger.error(f"Error calculating price for symbol {option['symbol']}, strike {option['strike']}: {e}")
+        st.warning(f"Error calculating price for symbol {option['symbol']}, strike {option['strike']}: {e}")
         return 0.0
 
 # Strategy P&L over time and price
@@ -230,25 +245,11 @@ def calculate_strategy_pnl(strategy: List[Dict], spot_range: np.ndarray, time_po
                     else:
                         pnl[t_idx, s_idx] -= (spot_price - leg['strike']) * num_contracts * 100
                 else:
-                    strike = float(leg['strike'])
-                    if eval_date >= expiration_date:
-                        # At expiration, use intrinsic value
-                        if leg['type'].lower() == 'call':
-                            intrinsic = max(spot_price - strike, 0)
-                        else:  # put
-                            intrinsic = max(strike - spot_price, 0)
-                        if leg['position'] == 'long':
-                            pnl[t_idx, s_idx] += intrinsic * num_contracts * 100
-                        else:
-                            pnl[t_idx, s_idx] -= intrinsic * num_contracts * 100
+                    option_price = calculate_option_price(leg, spot_price, risk_free_rate, volatility, eval_date, expiration_date)
+                    if leg['position'] == 'long':
+                        pnl[t_idx, s_idx] += option_price * num_contracts * 100
                     else:
-                        # Before expiration, use QuantLib to calculate option price
-                        option_price = calculate_option_price(leg, spot_price, risk_free_rate, volatility, eval_date, expiration_date)
-                        if leg['position'] == 'long':
-                            pnl[t_idx, s_idx] += option_price * num_contracts * 100
-                        else:
-                            pnl[t_idx, s_idx] -= option_price * num_contracts * 100
-    # Subtract initial cost to get P&L
+                        pnl[t_idx, s_idx] -= option_price * num_contracts * 100
     pnl -= initial_cost
     return pnl, initial_cost
 
@@ -345,14 +346,14 @@ elif not st.session_state.filtered_puts:
         "Ajuste el rango de strikes."
     )
 
+# Time points for 3D plot
+time_points = [date.today() + timedelta(days=x) for x in np.linspace(0, st.session_state.expiration_days, 10) if date.today() + timedelta(days=x) <= st.session_state.selected_exp]
+time_points = time_points or [date.today(), st.session_state.selected_exp]
+spot_range = np.linspace(st.session_state.debug_plot_range['min_price'], st.session_state.debug_plot_range['max_price'], 20)
+
 # Strategy selection page
 st.sidebar.header("Selecciona una Estrategia")
 strategy_page = st.sidebar.radio("Estrategias", ["Opciones Individuales", "Covered Call", "Protective Put"])
-
-# Time points for 3D plot
-time_points = [date.today() + timedelta(days=x) for x in np.linspace(0, st.session_state.expiration_days, 10) if date.today() + timedelta(days=x) <= st.session_state.selected_exp]
-time_points = time_points or [date.today(), st.session_state.selected_exp]  # Ensure at least two points
-spot_range = np.linspace(st.session_state.debug_plot_range['min_price'], st.session_state.debug_plot_range['max_price'], 50)
 
 # Options table with QuantLib metrics
 if strategy_page == "Opciones Individuales":
@@ -360,20 +361,20 @@ if strategy_page == "Opciones Individuales":
     calls_data = []
     puts_data = []
     for option in st.session_state.filtered_calls:
-        metrics = calculate_option_price(option, st.session_state.current_price, st.session_state.risk_free_rate, st.session_state.iv, date.today(), st.session_state.selected_exp)
+        price = calculate_option_price(option, st.session_state.current_price, st.session_state.risk_free_rate, st.session_state.iv, date.today(), st.session_state.selected_exp)
         calls_data.append({
             'Strike': option['strike'],
             'Bid': option.get('px_bid', '-'),
             'Ask': option.get('px_ask', '-'),
-            'Theoretical Price': metrics if metrics else '-'
+            'Theoretical Price': price if price else '-'
         })
     for option in st.session_state.filtered_puts:
-        metrics = calculate_option_price(option, st.session_state.current_price, st.session_state.risk_free_rate, st.session_state.iv, date.today(), st.session_state.selected_exp)
+        price = calculate_option_price(option, st.session_state.current_price, st.session_state.risk_free_rate, st.session_state.iv, date.today(), st.session_state.selected_exp)
         puts_data.append({
             'Strike': option['strike'],
             'Bid': option.get('px_bid', '-'),
             'Ask': option.get('px_ask', '-'),
-            'Theoretical Price': metrics if metrics else '-'
+            'Theoretical Price': price if price else '-'
         })
 
     st.subheader("Calls")
@@ -390,11 +391,11 @@ elif strategy_page == "Covered Call":
         format_func=lambda x: f"Strike {x['strike']:.2f} (Bid: {x.get('px_bid', '-')}, Ask: {x.get('px_ask', '-')})"
     )
     strategy = [
-        {'type': 'call', 'strike': selected_call['strike'], 'position': 'short', 'px_bid': selected_call.get('px_bid', 0), 'px_ask': selected_call.get('px_ask', 0)},
-        {'type': 'stock', 'strike': st.session_state.current_price, 'position': 'long'}
+        {'type': 'call', 'strike': selected_call['strike'], 'position': 'short', 'px_bid': selected_call.get('px_bid', 0), 'px_ask': selected_call.get('px_ask', 0), 'symbol': selected_call['symbol']},
+        {'type': 'stock', 'strike': st.session_state.current_price, 'position': 'long', 'symbol': 'GGAL'}
     ]
     
-    # Calculate P&L over time and price
+    # Calculate P&L
     pnl, total_cost = calculate_strategy_pnl(
         strategy, spot_range, time_points, st.session_state.num_contracts,
         st.session_state.commission_rate, st.session_state.risk_free_rate, st.session_state.iv, st.session_state.selected_exp
@@ -405,18 +406,12 @@ elif strategy_page == "Covered Call":
     Z = pnl.T
     
     fig = go.Figure()
-    
-    # Add surface for P&L
     fig.add_trace(go.Surface(x=X, y=Y, z=Z, colorscale='Viridis', name='P&L', showscale=True))
-    
-    # Add red plane for breakeven (P&L = 0)
     fig.add_trace(go.Surface(
         x=X, y=Y, z=np.zeros_like(Z),
         colorscale=[[0, 'rgba(255, 0, 0, 0.3)'], [1, 'rgba(255, 0, 0, 0.3)']],
         showscale=False, name='Breakeven'
     ))
-    
-    # Add blue plane for current price
     current_price_plane = np.full_like(Z, st.session_state.current_price)
     fig.add_trace(go.Surface(
         x=X, y=current_price_plane, z=Z,
@@ -450,11 +445,11 @@ elif strategy_page == "Protective Put":
         format_func=lambda x: f"Strike {x['strike']:.2f} (Bid: {x.get('px_bid', '-')}, Ask: {x.get('px_ask', '-')})"
     )
     strategy = [
-        {'type': 'put', 'strike': selected_put['strike'], 'position': 'long', 'px_bid': selected_put.get('px_bid', 0), 'px_ask': selected_put.get('px_ask', 0)},
-        {'type': 'stock', 'strike': st.session_state.current_price, 'position': 'long'}
+        {'type': 'put', 'strike': selected_put['strike'], 'position': 'long', 'px_bid': selected_put.get('px_bid', 0), 'px_ask': selected_put.get('px_ask', 0), 'symbol': selected_put['symbol']},
+        {'type': 'stock', 'strike': st.session_state.current_price, 'position': 'long', 'symbol': 'GGAL'}
     ]
     
-    # Calculate P&L over time and price
+    # Calculate P&L
     pnl, total_cost = calculate_strategy_pnl(
         strategy, spot_range, time_points, st.session_state.num_contracts,
         st.session_state.commission_rate, st.session_state.risk_free_rate, st.session_state.iv, st.session_state.selected_exp
@@ -465,18 +460,12 @@ elif strategy_page == "Protective Put":
     Z = pnl.T
     
     fig = go.Figure()
-    
-    # Add surface for P&L
     fig.add_trace(go.Surface(x=X, y=Y, z=Z, colorscale='Viridis', name='P&L', showscale=True))
-    
-    # Add red plane for breakeven (P&L = 0)
     fig.add_trace(go.Surface(
         x=X, y=Y, z=np.zeros_like(Z),
         colorscale=[[0, 'rgba(255, 0, 0, 0.3)'], [1, 'rgba(255, 0, 0, 0.3)']],
         showscale=False, name='Breakeven'
     ))
-    
-    # Add blue plane for current price
     current_price_plane = np.full_like(Z, st.session_state.current_price)
     fig.add_trace(go.Surface(
         x=X, y=current_price_plane, z=Z,
