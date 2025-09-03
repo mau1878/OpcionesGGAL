@@ -272,11 +272,13 @@ def create_bullish_spread_table(options, calc_func, num_contracts, commission_ra
         return pd.DataFrame()
     df = pd.DataFrame.from_dict(dict(data), orient='index')
     df = df.reset_index()
-    df.columns = ['Strikes_Tuple', 'Net Cost' if is_debit else 'Net Credit', 'Max Profit', 'Max Loss', 'Breakeven',
+    # Match the number of columns after reset_index (2 index levels + 5 data columns)
+    df.columns = ['level_0', 'level_1', 'Net Cost' if is_debit else 'Net Credit', 'Max Profit', 'Max Loss', 'Breakeven',
                   'Cost-to-Profit Ratio']
-    df['Strikes'] = df['Strikes_Tuple'].apply(
-        lambda x: f"{x[0]:.1f}-{x[1]:.1f}" if isinstance(x, tuple) and len(x) == 2 else str(x))
-    df = df.drop(columns=['Strikes_Tuple'])
+    df['Strikes'] = df.apply(
+        lambda row: f"{row['level_0']:.1f}-{row['level_1']:.1f}" if pd.notna(row['level_0']) and pd.notna(
+            row['level_1']) else str(row.name), axis=1)
+    df = df.drop(columns=['level_0', 'level_1'])
     return df
 
 
@@ -325,11 +327,13 @@ def create_bearish_spread_table(options, calc_func, num_contracts, commission_ra
         return pd.DataFrame()
     df = pd.DataFrame.from_dict(dict(data), orient='index')
     df = df.reset_index()
-    df.columns = ['Strikes_Tuple', 'Net Cost' if is_debit else 'Net Credit', 'Max Profit', 'Max Loss', 'Breakeven',
+    # Match the number of columns after reset_index (2 index levels + 5 data columns)
+    df.columns = ['level_0', 'level_1', 'Net Cost' if is_debit else 'Net Credit', 'Max Profit', 'Max Loss', 'Breakeven',
                   'Cost-to-Profit Ratio']
-    df['Strikes'] = df['Strikes_Tuple'].apply(
-        lambda x: f"{x[0]:.1f}-{x[1]:.1f}" if isinstance(x, tuple) and len(x) == 2 else str(x))
-    df = df.drop(columns=['Strikes_Tuple'])
+    df['Strikes'] = df.apply(
+        lambda row: f"{row['level_0']:.1f}-{row['level_1']:.1f}" if pd.notna(row['level_0']) and pd.notna(
+            row['level_1']) else str(row.name), axis=1)
+    df = df.drop(columns=['level_0', 'level_1'])
     return df
 
 def create_neutral_table(options, calc_func, num_contracts, commission_rate, num_legs):
