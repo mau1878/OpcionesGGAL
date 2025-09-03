@@ -202,13 +202,13 @@ def calculate_option_price(option: Dict, spot_price: float, risk_free_rate: floa
         payoff = ql.PlainVanillaPayoff(option_type, strike)
         exercise = ql.EuropeanExercise(expiration)
 
-        spot = ql.QuoteHandle(ql.SimpleQuote(float(spot_price)))
-        risk_free = ql.YieldTermStructureHandle(ql.FlatForward(evaluation_date, risk_free_rate, ql.Actual365Fixed()))
-        volatility_handle = ql.BlackVolTermStructureHandle(ql.BlackConstantVol(evaluation_date, ql.NullCalendar(), volatility, ql.Actual365Fixed()))
-        dividend_yield = ql.YieldTermStructureHandle(ql.FlatForward(evaluation_date, 0.0, ql.Actual365Fixed()))
+        spot_handle = ql.QuoteHandle(ql.SimpleQuote(float(spot_price)))
+        risk_free_ts = ql.YieldTermStructureHandle(ql.FlatForward(evaluation_date, risk_free_rate, ql.Actual365Fixed()))
+        volatility_ts = ql.BlackVolTermStructureHandle(ql.BlackConstantVol(evaluation_date, ql.NullCalendar(), volatility, ql.Actual365Fixed()))
+        dividend_ts = ql.YieldTermStructureHandle(ql.FlatForward(evaluation_date, 0.0, ql.Actual365Fixed()))
 
         logger.debug(f"BlackScholesProcess inputs: spot={spot_price}, strike={strike}, risk_free={risk_free_rate}, volatility={volatility}")
-        process = ql.BlackScholesProcess(spot, dividend_yield, risk_free, volatility_handle)
+        process = ql.BlackScholesProcess(spot_handle, dividend_ts, risk_free_ts, volatility_ts)
         option = ql.VanillaOption(payoff, exercise)
         option.setPricingEngine(ql.AnalyticEuropeanEngine(process))
         price = option.NPV()
