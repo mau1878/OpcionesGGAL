@@ -182,9 +182,9 @@ def get_risk_free_rate():
         return 0.35
 
 # QuantLib option pricing
-def calculate_option_price(option: Dict, spot_price: float, risk_free_rate: float, volatility: float, eval_date: date, expiration_date: date) -> float:
+def calculate_option_price(option: Dict, spot_price: float, risk_free_rate: float, volatility: float, eval_date: date, expiration_date: date, use_quantlib: bool = False) -> float:
     try:
-        logger.debug(f"Calculating option price: symbol={option['symbol']}, strike={option['strike']}, spot={spot_price}, eval_date={eval_date}, expiration={expiration_date}, risk_free={risk_free_rate}, vol={volatility}")
+        logger.debug(f"Calculating option price: symbol={option['symbol']}, strike={option['strike']}, spot={spot_price}, eval_date={eval_date}, expiration={expiration_date}, risk_free={risk_free_rate}, vol={volatility}, use_quantlib={use_quantlib}")
         evaluation_date = ql.Date(eval_date.day, eval_date.month, eval_date.year)
         expiration = ql.Date(expiration_date.day, expiration_date.month, expiration_date.year)
         if evaluation_date >= expiration:
@@ -213,20 +213,20 @@ def calculate_option_price(option: Dict, spot_price: float, risk_free_rate: floa
         dividend_ts = ql.YieldTermStructureHandle(ql.FlatForward(evaluation_date, 0.0, ql.Actual365Fixed()))
 
         logger.debug(f"BlackScholesProcess inputs: spot={spot_price}, strike={strike}, risk_free={risk_free_rate}, volatility={volatility}, types: spot_handle={type(spot_handle).__name__}, dividend_ts={type(dividend_ts).__name__}, risk_free_ts={type(risk_free_ts).__name__}, volatility_ts={type(volatility_ts).__name__}")
-        # Temporarily use intrinsic value to bypass QuantLib issue
-        st.warning(f"Using intrinsic value for {option['symbol']} due to QuantLib issue")
-        if option['type'].lower() == 'call':
-            return max(spot_price - strike, 0)
-        else:  # put
-            return max(strike - spot_price, 0)
 
-        # Uncomment to re-enable QuantLib calculations
-        # process = ql.BlackScholesProcess(spot_handle, dividend_ts, risk_free_ts, volatility_ts)
-        # option = ql.VanillaOption(payoff, exercise)
-        # option.setPricingEngine(ql.AnalyticEuropeanEngine(process))
-        # price = option.NPV()
-        # logger.debug(f"Calculated price: {price}")
-        # return price
+        if not use_quantlib:
+            st.warning(f"Using intrinsic value for {option['symbol']} due to QuantLib issue")
+            if option['type'].lower() == 'call':
+                return max(spot_price - strike, 0)
+            else:  # put
+                return max(strike - spot_price, 0)
+
+        process = ql.BlackScholesProcess(spot_handle, dividend_ts, risk_free_ts, volatility_ts)
+        option = ql.VanillaOption(payoff, exercise)
+        option.setPricingEngine(ql.AnalyticEuropeanEngine(process))
+        price = option.NPV()
+        logger.debug(f"Calculated price: {price}")
+        return price
     except Exception as e:
         logger.error(f"Error calculating price for symbol {option['symbol']}, strike {option['strike']}: {e}")
         st.warning(f"Error calculating price for symbol {option['symbol']}, strike {option['strike']}: {e}")
@@ -237,7 +237,8 @@ def calculate_option_price(option: Dict, spot_price: float, risk_free_rate: floa
             return max(strike - spot_price, 0)
 
 # Strategy P&L over time and price
-def calculate_strategy_pnl(strategy: List[Dict], spot_range: np.ndarray, time_points: List[date], num_contracts: int, commission_rate: float, risk_free_rate: float, volatility: float, expiration_date: date) -> tuple[np.ndarray, float]:
+def calculate_strategy_pnl(strategy: List[Dict], spot_range: np.ndarray, time_points: List[date], num_contracts: int, commission_rate: float, risk_free_rate: float, volatility: float, expiration_date: date, use_quantlib: bool) -> tuple[np.ndarray, float]:
+    logger.debug(f"Calculating P&L for strategy: {strategy}")
     pnl = np.zeros((len(time_points), len(spot_range)))
     initial_cost = 0.0
     for leg in strategy:
@@ -263,12 +264,13 @@ def calculate_strategy_pnl(strategy: List[Dict], spot_range: np.ndarray, time_po
                     else:
                         pnl[t_idx, s_idx] -= (spot_price - leg['strike']) * num_contracts * 100
                 else:
-                    option_price = calculate_option_price(leg, spot_price, risk_free_rate, volatility, eval_date, expiration_date)
+                    option_price = calculate_option_price(leg, spot_price, risk_free_rate, volatility, eval_date, expiration_date, use_quantlib)
                     if leg['position'] == 'long':
                         pnl[t_idx, s_idx] += option_price * num_contracts * 100
                     else:
                         pnl[t_idx, s_idx] -= option_price * num_contracts * 100
     pnl -= initial_cost
+    logger.debug(f"P&L calculated, initial_cost={initial_cost}")
     return pnl, initial_cost
 
 # Streamlit app setup
@@ -321,6 +323,7 @@ st.session_state.selected_exp = st.sidebar.selectbox(
 
 st.session_state.num_contracts = st.sidebar.number_input("Número de contratos", min_value=1, value=1, step=1)
 st.session_state.commission_rate = st.sidebar.number_input("Comisión (%)", min_value=0.0, value=0.5, step=0.1) / 100
+st.session_state.use_quantlib = st.sidebar.checkbox("Usar QuantLib para cálculos (experimental)", value=False)
 st.sidebar.caption("Las tarifas son estimaciones; las reales pueden variar.")
 st.session_state.risk_free_rate = get_risk_free_rate()
 st.session_state.iv = DEFAULT_IV
@@ -379,7 +382,7 @@ if strategy_page == "Opciones Individuales":
     calls_data = []
     puts_data = []
     for option in st.session_state.filtered_calls:
-        price = calculate_option_price(option, st.session_state.current_price, st.session_state.risk_free_rate, st.session_state.iv, date.today(), st.session_state.selected_exp)
+        price = calculate_option_price(option, st.session_state.current_price, st.session_state.risk_free_rate, st.session_state.iv, date.today(), st.session_state.selected_exp, st.session_state.use_quantlib)
         calls_data.append({
             'Strike': option['strike'],
             'Bid': option.get('px_bid', 0.0),
@@ -387,7 +390,7 @@ if strategy_page == "Opciones Individuales":
             'Theoretical Price': float(price) if price is not None else 0.0
         })
     for option in st.session_state.filtered_puts:
-        price = calculate_option_price(option, st.session_state.current_price, st.session_state.risk_free_rate, st.session_state.iv, date.today(), st.session_state.selected_exp)
+        price = calculate_option_price(option, st.session_state.current_price, st.session_state.risk_free_rate, st.session_state.iv, date.today(), st.session_state.selected_exp, st.session_state.use_quantlib)
         puts_data.append({
             'Strike': option['strike'],
             'Bid': option.get('px_bid', 0.0),
@@ -427,7 +430,7 @@ elif strategy_page == "Covered Call":
     with st.spinner("Calculando P&L para Covered Call..."):
         pnl, total_cost = calculate_strategy_pnl(
             strategy, spot_range, time_points, st.session_state.num_contracts,
-            st.session_state.commission_rate, st.session_state.risk_free_rate, st.session_state.iv, st.session_state.selected_exp
+            st.session_state.commission_rate, st.session_state.risk_free_rate, st.session_state.iv, st.session_state.selected_exp, st.session_state.use_quantlib
         )
     
     # Create 3D plot
@@ -492,7 +495,7 @@ elif strategy_page == "Protective Put":
     with st.spinner("Calculando P&L para Protective Put..."):
         pnl, total_cost = calculate_strategy_pnl(
             strategy, spot_range, time_points, st.session_state.num_contracts,
-            st.session_state.commission_rate, st.session_state.risk_free_rate, st.session_state.iv, st.session_state.selected_exp
+            st.session_state.commission_rate, st.session_state.risk_free_rate, st.session_state.iv, st.session_state.selected_exp, st.session_state.use_quantlib
         )
     
     # Create 3D plot
