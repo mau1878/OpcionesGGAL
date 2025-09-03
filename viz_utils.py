@@ -229,36 +229,72 @@ def visualize_volatility_3d(result, current_price, expiration_days, iv, key, opt
 
 def create_bullish_spread_table(options, calc_func, num_contracts, commission_rate, is_debit=True):
     data = []
-    options_sorted = sorted(options, key=lambda o: o["strike"])
-    for long_opt, short_opt in combinations(options_sorted, 2):
-        result = calc_func(long_opt, short_opt, num_contracts, commission_rate) if is_debit else calc_func(short_opt, long_opt, num_contracts, commission_rate)
-        if result and result["max_profit"] > 0:  # Skip unprofitable
-            row = {
-                "Net Cost" if is_debit else "Net Credit": result["net_cost"] if is_debit else -result["net_cost"],
-                "Max Profit": result["max_profit"],
-                "Max Loss": result["max_loss"],
-                "Cost-to-Profit Ratio": result["max_loss"] / result["max_profit"] if result["max_profit"] > 0 else float('inf'),
-                "Breakeven": result["breakeven"]
-            }
-            data.append(((long_opt["strike"], short_opt["strike"]), row))
+    # Filter options by strike range
+    min_strike = st.session_state.current_price * (1 - st.session_state.plot_range_pct)
+    max_strike = st.session_state.current_price * (1 + st.session_state.plot_range_pct)
+    filtered_options = [opt for opt in options if min_strike <= opt["strike"] <= max_strike]
+    logger.info(f"Filtered options: {[opt['strike'] for opt in filtered_options]}")
+    if len(filtered_options) < 2:
+        logger.warning("Insufficient options for spread calculation")
+        return pd.DataFrame()
+    
+    for long_opt, short_opt in combinations(filtered_options, 2):
+        if long_opt["strike"] < short_opt["strike"]:
+            result = calc_func(long_opt, short_opt, num_contracts, commission_rate)
+            if result and isinstance(result, dict) and "breakeven" in result and result["max_profit"] > 0:
+                row = {
+                    "Net Cost" if is_debit else "Net Credit": result["net_cost"] if is_debit else -result["net_cost"],
+                    "Max Profit": result["max_profit"],
+                    "Max Loss": result["max_loss"],
+                    "Breakeven": result["breakeven"],
+                    "Cost-to-Profit Ratio": result["max_loss"] / result["max_profit"] if result["max_profit"] > 0 else float('inf')
+                }
+                data.append(((long_opt["strike"], short_opt["strike"]), row))
+            else:
+                logger.debug(f"Skipping invalid result for strikes {long_opt['strike']}-{short_opt['strike']}: {result}")
     df = pd.DataFrame.from_dict(dict(data), orient='index') if data else pd.DataFrame()
+    if not df.empty:
+        df = df.reset_index()
+        df['Strikes'] = df.apply(
+            lambda row: f"{row['level_0']}-{row['level_1']}",
+            axis=1
+        )
+        df = df.drop(columns=['level_0', 'level_1']).reset_index(drop=True)
     return df
 
 def create_bearish_spread_table(options, calc_func, num_contracts, commission_rate, is_debit=True):
     data = []
-    options_sorted = sorted(options, key=lambda o: o["strike"])
-    for short_opt, long_opt in combinations(options_sorted, 2):
-        result = calc_func(short_opt, long_opt, num_contracts, commission_rate) if not is_debit else calc_func(long_opt, short_opt, num_contracts, commission_rate)
-        if result and result["max_profit"] > 0:  # Skip unprofitable
-            row = {
-                "Net Credit" if not is_debit else "Net Cost": -result["net_cost"] if not is_debit else result["net_cost"],
-                "Max Profit": result["max_profit"],
-                "Max Loss": result["max_loss"],
-                "Cost-to-Profit Ratio": result["max_loss"] / result["max_profit"] if result["max_profit"] > 0 else float('inf'),
-                "Breakeven": result["breakeven"]
-            }
-            data.append(((short_opt["strike"], long_opt["strike"]), row))
+    # Filter options by strike range
+    min_strike = st.session_state.current_price * (1 - st.session_state.plot_range_pct)
+    max_strike = st.session_state.current_price * (1 + st.session_state.plot_range_pct)
+    filtered_options = [opt for opt in options if min_strike <= opt["strike"] <= max_strike]
+    logger.info(f"Filtered options for bearish spread: {[opt['strike'] for opt in filtered_options]}")
+    if len(filtered_options) < 2:
+        logger.warning("Insufficient options for bearish spread calculation")
+        return pd.DataFrame()
+    
+    for short_opt, long_opt in combinations(filtered_options, 2):
+        if short_opt["strike"] < long_opt["strike"]:
+            result = calc_func(short_opt, long_opt, num_contracts, commission_rate)
+            if result and isinstance(result, dict) and "breakeven" in result and result["max_profit"] > 0:
+                row = {
+                    "Net Cost" if is_debit else "Net Credit": result["net_cost"] if is_debit else -result["net_cost"],
+                    "Max Profit": result["max_profit"],
+                    "Max Loss": result["max_loss"],
+                    "Breakeven": result["breakeven"],
+                    "Cost-to-Profit Ratio": result["max_loss"] / result["max_profit"] if result["max_profit"] > 0 else float('inf')
+                }
+                data.append(((short_opt["strike"], long_opt["strike"]), row))
+            else:
+                logger.debug(f"Skipping invalid result for strikes {short_opt['strike']}-{long_opt['strike']}: {result}")
     df = pd.DataFrame.from_dict(dict(data), orient='index') if data else pd.DataFrame()
+    if not df.empty:
+        df = df.reset_index()
+        df['Strikes'] = df.apply(
+            lambda row: f"{row['level_0']}-{row['level_1']}",
+            axis=1
+        )
+        df = df.drop(columns=['level_0', 'level_1']).reset_index(drop=True)
     return df
 
 def create_neutral_table(options, calc_func, num_contracts, commission_rate, num_legs):
