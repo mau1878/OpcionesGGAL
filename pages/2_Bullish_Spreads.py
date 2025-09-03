@@ -26,12 +26,14 @@ num_contracts = st.session_state.num_contracts
 min_strike = current_price * (1 - st.session_state.plot_range_pct)
 max_strike = current_price * (1 + st.session_state.plot_range_pct)
 
-# Log available strikes for debugging
+# Log available strikes and option data for debugging
 call_strikes = sorted({opt["strike"] for opt in calls})
 put_strikes = sorted({opt["strike"] for opt in puts})
 logger.info(f"Available call strikes: {call_strikes}")
 logger.info(f"Available put strikes: {put_strikes}")
 logger.info(f"Strike range: {min_strike:.2f}-{max_strike:.2f}")
+logger.info(f"Calls data: {[{k: v for k, v in opt.items()} for opt in calls]}")
+logger.info(f"Puts data: {[{k: v for k, v in opt.items()} for opt in puts]}")
 
 # Tabs for different strategies
 tab1, tab2 = st.tabs(["Bull Call Spread", "Bull Put Spread"])
@@ -56,7 +58,7 @@ with tab1:
             edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}")
         edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: f"{x:.2f}")
 
-        # Convert MultiIndex to a simple index
+        # Ensure simple index
         if isinstance(edited_df.index, pd.MultiIndex):
             edited_df = edited_df.reset_index()
             edited_df['Strikes'] = edited_df.apply(
@@ -82,6 +84,7 @@ with tab1:
         st.session_state["bull_call_df"] = edited_df.copy()
 
         # Display DataFrame with index
+        st.write("Select a row by its index to visualize the 3D payoff plot.")
         st.dataframe(edited_df, use_container_width=True, hide_index=False)
 
         # Create selectbox options with row index
@@ -93,7 +96,6 @@ with tab1:
         )
         if selected_option:
             try:
-                # Extract index and strikes from selected option
                 idx_str, strikes_str = selected_option.split(": ", 1)
                 idx = int(idx_str)
                 strikes = [float(s) for s in strikes_str.split('-')]
@@ -136,7 +138,7 @@ with tab1:
             calls, calculate_bull_call_spread, num_contracts, commission_rate, is_debit=True
         )
         if not profit_df.empty:
-            st.dataframe(profit_df.style.format("{:.2f}").background_gradient(cmap='viridis_r'))
+            st.dataframe(profit_df.style.format("{:.2f}").background_gradient(cmap='viridis'))
         else:
             st.warning("No hay datos disponibles para la matriz de costos.")
             logger.warning("Empty profit_df for Bull Call Spread matrix.")
@@ -164,7 +166,7 @@ with tab2:
             edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}")
         edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: f"{x:.2f}")
 
-        # Convert MultiIndex to a simple index
+        # Ensure simple index
         if isinstance(edited_df.index, pd.MultiIndex):
             edited_df = edited_df.reset_index()
             edited_df['Strikes'] = edited_df.apply(
@@ -190,6 +192,7 @@ with tab2:
         st.session_state["bull_put_df"] = edited_df.copy()
 
         # Display DataFrame with index
+        st.write("Select a row by its index to visualize the 3D payoff plot.")
         st.dataframe(edited_df, use_container_width=True, hide_index=False)
 
         # Create selectbox options with row index
@@ -201,7 +204,6 @@ with tab2:
         )
         if selected_option:
             try:
-                # Extract index and strikes from selected option
                 idx_str, strikes_str = selected_option.split(": ", 1)
                 idx = int(idx_str)
                 strikes = [float(s) for s in strikes_str.split('-')]
@@ -213,11 +215,11 @@ with tab2:
                     logger.debug(f"Visualizing Bull Put Spread for index: {idx}, strikes: {strikes}")
                     short_opt = next((opt for opt in puts if opt["strike"] == short_strike), None)
                     long_opt = next((opt for opt in puts if opt["strike"] == long_strike), None)
-                    if long_opt and short_opt:
+                    if short_opt and long_opt:
                         logger.debug(f"Found options: short={short_opt['strike']}, long={long_opt['strike']}")
-                        result = calculate_bull_put_spread(long_opt, short_opt, num_contracts, commission_rate)
+                        result = calculate_bull_put_spread(short_opt, long_opt, num_contracts, commission_rate)
                         if result:
-                            result["contract_ratios"] = [1, -1]
+                            result["contract_ratios"] = [-1, 1]
                             visualize_bullish_3d(
                                 result, current_price, expiration_days, st.session_state.iv,
                                 f"Bull Put Spread {strikes_str}",
@@ -229,7 +231,7 @@ with tab2:
                             logger.error("Invalid calculation for Bull Put Spread")
                     else:
                         st.error("Datos de opciones no disponibles para esta combinación.")
-                        logger.error(f"Options not found: long={long_opt}, short={short_opt}")
+                        logger.error(f"Options not found: short={short_opt}, long={long_opt}")
             except ValueError as e:
                 st.error(f"Error al procesar los strikes: {e}")
                 logger.error(f"Error parsing strikes {selected_option}: {e}")
@@ -244,7 +246,7 @@ with tab2:
             puts, calculate_bull_put_spread, num_contracts, commission_rate, is_debit=False
         )
         if not profit_df.empty:
-            st.dataframe(profit_df.style.format("{:.2f}").background_gradient(cmap='viridis'))
+            st.dataframe(profit_df.style.format("{:.2f}").background_gradient(cmap='viridis_r'))
         else:
             st.warning("No hay datos disponibles para la matriz de créditos.")
             logger.warning("Empty profit_df for Bull Put Spread matrix.")
