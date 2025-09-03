@@ -191,7 +191,7 @@ def calculate_option_price(option: Dict, spot_price: float, risk_free_rate: floa
         payoff = ql.PlainVanillaPayoff(option_type, strike)
         exercise = ql.EuropeanExercise(expiration)
 
-        spot = ql.QuoteHandle(ql.SimpleQuote(spot_price))
+        spot = ql.QuoteHandle(ql.SimpleQuote(float(spot_price)))  # Ensure scalar input
         risk_free = ql.YieldTermStructureHandle(ql.FlatForward(evaluation_date, risk_free_rate, ql.Actual360()))
         volatility = ql.BlackVolTermStructureHandle(ql.BlackConstantVol(evaluation_date, ql.NullCalendar(), volatility, ql.Actual360()))
         dividend_yield = ql.YieldTermStructureHandle(ql.FlatForward(evaluation_date, 0.0, ql.Actual360()))
@@ -223,30 +223,31 @@ def calculate_strategy_pnl(strategy: List[Dict], spot_range: np.ndarray, time_po
                 initial_cost -= (initial_premium * num_contracts * 100 - fees)
         
         for t_idx, eval_date in enumerate(time_points):
-            if leg['type'] == 'stock':
-                if leg['position'] == 'long':
-                    pnl[t_idx] += (spot_range - leg['strike']) * num_contracts * 100
-                else:
-                    pnl[t_idx] -= (spot_range - leg['strike']) * num_contracts * 100
-            else:
-                strike = float(leg['strike'])
-                if eval_date >= expiration_date:
-                    # At expiration, use intrinsic value
-                    if leg['type'].lower() == 'call':
-                        intrinsic = np.maximum(spot_range - strike, 0)
-                    else:  # put
-                        intrinsic = np.maximum(strike - spot_range, 0)
+            for s_idx, spot_price in enumerate(spot_range):
+                if leg['type'] == 'stock':
                     if leg['position'] == 'long':
-                        pnl[t_idx] += intrinsic * num_contracts * 100
+                        pnl[t_idx, s_idx] += (spot_price - leg['strike']) * num_contracts * 100
                     else:
-                        pnl[t_idx] -= intrinsic * num_contracts * 100
+                        pnl[t_idx, s_idx] -= (spot_price - leg['strike']) * num_contracts * 100
                 else:
-                    # Before expiration, use QuantLib to calculate option price
-                    option_price = calculate_option_price(leg, spot_range, risk_free_rate, volatility, eval_date, expiration_date)
-                    if leg['position'] == 'long':
-                        pnl[t_idx] += option_price * num_contracts * 100
+                    strike = float(leg['strike'])
+                    if eval_date >= expiration_date:
+                        # At expiration, use intrinsic value
+                        if leg['type'].lower() == 'call':
+                            intrinsic = max(spot_price - strike, 0)
+                        else:  # put
+                            intrinsic = max(strike - spot_price, 0)
+                        if leg['position'] == 'long':
+                            pnl[t_idx, s_idx] += intrinsic * num_contracts * 100
+                        else:
+                            pnl[t_idx, s_idx] -= intrinsic * num_contracts * 100
                     else:
-                        pnl[t_idx] -= option_price * num_contracts * 100
+                        # Before expiration, use QuantLib to calculate option price
+                        option_price = calculate_option_price(leg, spot_price, risk_free_rate, volatility, eval_date, expiration_date)
+                        if leg['position'] == 'long':
+                            pnl[t_idx, s_idx] += option_price * num_contracts * 100
+                        else:
+                            pnl[t_idx, s_idx] -= option_price * num_contracts * 100
     # Subtract initial cost to get P&L
     pnl -= initial_cost
     return pnl, initial_cost
