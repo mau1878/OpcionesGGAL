@@ -64,7 +64,7 @@ with st.spinner("Calculando estrategias..."):
             
             def find_breakeven(price_range, tolerance=1e-3):
                 breakevens = []
-                for p in np.linspace(price_range[0], price_range[1], 1000):
+                for p in np.linspace(price_range[0], price_range[1], 500):  # Reduced for performance
                     if abs(utils.calculate_strategy_value(options, actions, contracts, p, 0, iv_calibrated) - net_cost) < tolerance:
                         breakevens.append(p)
                 return breakevens
@@ -113,7 +113,7 @@ with st.spinner("Calculando estrategias..."):
             
             def find_breakeven(price_range, tolerance=1e-3):
                 breakevens = []
-                for p in np.linspace(price_range[0], price_range[1], 1000):
+                for p in np.linspace(price_range[0], price_range[1], 500):  # Reduced for performance
                     if abs(utils.calculate_strategy_value(options, actions, contracts, p, 0, iv_calibrated) - net_cost) < tolerance:
                         breakevens.append(p)
                 return breakevens
@@ -168,11 +168,15 @@ if results:
             min_price = current_price * (1 - st.session_state.plot_range_pct)
             max_price = current_price * (1 + st.session_state.plot_range_pct)
             
-            utils.visualize_volatility_3d(
-                {"raw_net": net_cost / (100 * num_contracts * 2), "net_cost": net_cost, "num_contracts": num_contracts, "strikes": [o["strike"] for o in options]},
-                current_price, expiration_days, iv_calibrated, strategy_type, options, actions
+            # 3D Plot
+            X, Y, Z, min_price_3d, max_price_3d, times = utils._compute_payoff_grid(
+                lambda p, t, s: utils.calculate_strategy_value(options, actions, contracts, p, t, s),
+                current_price, expiration_days, iv_calibrated, net_cost
             )
+            fig = utils._create_3d_figure(X, Y, Z, strategy_type, current_price)
+            st.plotly_chart(fig, use_container_width=True, key=f"3d_plot_{idx}")
             
+            # 2D Plot
             st.subheader("Diagrama de P&L al Vencimiento")
             price_points = np.linspace(min_price, max_price, 100)
             payoff_at_expiration = [utils.calculate_strategy_value(options, actions, contracts, p, 0, iv_calibrated) - net_cost for p in price_points]
