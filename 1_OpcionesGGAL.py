@@ -202,12 +202,17 @@ def calculate_option_price(option: Dict, spot_price: float, risk_free_rate: floa
         payoff = ql.PlainVanillaPayoff(option_type, strike)
         exercise = ql.EuropeanExercise(expiration)
 
-        spot_handle = ql.QuoteHandle(ql.SimpleQuote(float(spot_price)))
+        # Ensure scalar inputs
+        spot_price = float(spot_price)
+        risk_free_rate = float(risk_free_rate)
+        volatility = float(volatility)
+
+        spot_handle = ql.QuoteHandle(ql.SimpleQuote(spot_price))
         risk_free_ts = ql.YieldTermStructureHandle(ql.FlatForward(evaluation_date, risk_free_rate, ql.Actual365Fixed()))
         volatility_ts = ql.BlackVolTermStructureHandle(ql.BlackConstantVol(evaluation_date, ql.NullCalendar(), volatility, ql.Actual365Fixed()))
         dividend_ts = ql.YieldTermStructureHandle(ql.FlatForward(evaluation_date, 0.0, ql.Actual365Fixed()))
 
-        logger.debug(f"BlackScholesProcess inputs: spot={spot_price}, strike={strike}, risk_free={risk_free_rate}, volatility={volatility}")
+        logger.debug(f"BlackScholesProcess inputs: spot={spot_price}, strike={strike}, risk_free={risk_free_rate}, volatility={volatility}, types: spot_handle={type(spot_handle)}, dividend_ts={type(dividend_ts)}, risk_free_ts={type(risk_free_ts)}, volatility_ts={type(volatility_ts)}")
         process = ql.BlackScholesProcess(spot_handle, dividend_ts, risk_free_ts, volatility_ts)
         option = ql.VanillaOption(payoff, exercise)
         option.setPricingEngine(ql.AnalyticEuropeanEngine(process))
@@ -217,7 +222,12 @@ def calculate_option_price(option: Dict, spot_price: float, risk_free_rate: floa
     except Exception as e:
         logger.error(f"Error calculating price for symbol {option['symbol']}, strike {option['strike']}: {e}")
         st.warning(f"Error calculating price for symbol {option['symbol']}, strike {option['strike']}: {e}")
-        return 0.0
+        # Fallback to intrinsic value for Opciones Individuales
+        strike = float(option['strike'])
+        if option['type'].lower() == 'call':
+            return max(spot_price - strike, 0)
+        else:  # put
+            return max(strike - spot_price, 0)
 
 # Strategy P&L over time and price
 def calculate_strategy_pnl(strategy: List[Dict], spot_range: np.ndarray, time_points: List[date], num_contracts: int, commission_rate: float, risk_free_rate: float, volatility: float, expiration_date: date) -> tuple[np.ndarray, float]:
@@ -385,6 +395,9 @@ if strategy_page == "Opciones Individuales":
 # Covered Call strategy
 elif strategy_page == "Covered Call":
     st.header("Covered Call")
+    if not st.session_state.filtered_calls:
+        st.error("No hay calls disponibles para la fecha de vencimiento seleccionada.")
+        st.stop()
     selected_call = st.selectbox(
         "Selecciona un Call para vender",
         st.session_state.filtered_calls,
@@ -396,10 +409,11 @@ elif strategy_page == "Covered Call":
     ]
     
     # Calculate P&L
-    pnl, total_cost = calculate_strategy_pnl(
-        strategy, spot_range, time_points, st.session_state.num_contracts,
-        st.session_state.commission_rate, st.session_state.risk_free_rate, st.session_state.iv, st.session_state.selected_exp
-    )
+    with st.spinner("Calculando P&L para Covered Call..."):
+        pnl, total_cost = calculate_strategy_pnl(
+            strategy, spot_range, time_points, st.session_state.num_contracts,
+            st.session_state.commission_rate, st.session_state.risk_free_rate, st.session_state.iv, st.session_state.selected_exp
+        )
     
     # Create 3D plot
     X, Y = np.meshgrid([t.toordinal() for t in time_points], spot_range)
@@ -439,6 +453,9 @@ elif strategy_page == "Covered Call":
 # Protective Put strategy
 elif strategy_page == "Protective Put":
     st.header("Protective Put")
+    if not st.session_state.filtered_puts:
+        st.error("No hay puts disponibles para la fecha de vencimiento seleccionada.")
+        st.stop()
     selected_put = st.selectbox(
         "Selecciona un Put para comprar",
         st.session_state.filtered_puts,
@@ -450,10 +467,11 @@ elif strategy_page == "Protective Put":
     ]
     
     # Calculate P&L
-    pnl, total_cost = calculate_strategy_pnl(
-        strategy, spot_range, time_points, st.session_state.num_contracts,
-        st.session_state.commission_rate, st.session_state.risk_free_rate, st.session_state.iv, st.session_state.selected_exp
-    )
+    with st.spinner("Calculando P&L para Protective Put..."):
+        pnl, total_cost = calculate_strategy_pnl(
+            strategy, spot_range, time_points, st.session_state.num_contracts,
+            st.session_state.commission_rate, st.session_state.risk_free_rate, st.session_state.iv, st.session_state.selected_exp
+        )
     
     # Create 3D plot
     X, Y = np.meshgrid([t.toordinal() for t in time_points], spot_range)
