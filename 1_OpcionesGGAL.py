@@ -212,13 +212,21 @@ def calculate_option_price(option: Dict, spot_price: float, risk_free_rate: floa
         volatility_ts = ql.BlackVolTermStructureHandle(ql.BlackConstantVol(evaluation_date, ql.NullCalendar(), volatility, ql.Actual365Fixed()))
         dividend_ts = ql.YieldTermStructureHandle(ql.FlatForward(evaluation_date, 0.0, ql.Actual365Fixed()))
 
-        logger.debug(f"BlackScholesProcess inputs: spot={spot_price}, strike={strike}, risk_free={risk_free_rate}, volatility={volatility}, types: spot_handle={type(spot_handle)}, dividend_ts={type(dividend_ts)}, risk_free_ts={type(risk_free_ts)}, volatility_ts={type(volatility_ts)}")
-        process = ql.BlackScholesProcess(spot_handle, dividend_ts, risk_free_ts, volatility_ts)
-        option = ql.VanillaOption(payoff, exercise)
-        option.setPricingEngine(ql.AnalyticEuropeanEngine(process))
-        price = option.NPV()
-        logger.debug(f"Calculated price: {price}")
-        return price
+        logger.debug(f"BlackScholesProcess inputs: spot={spot_price}, strike={strike}, risk_free={risk_free_rate}, volatility={volatility}, types: spot_handle={type(spot_handle).__name__}, dividend_ts={type(dividend_ts).__name__}, risk_free_ts={type(risk_free_ts).__name__}, volatility_ts={type(volatility_ts).__name__}")
+        # Temporarily use intrinsic value to bypass QuantLib error
+        st.warning(f"Using intrinsic value for {option['symbol']} due to QuantLib issue")
+        if option['type'].lower() == 'call':
+            return max(spot_price - strike, 0)
+        else:  # put
+            return max(strike - spot_price, 0)
+
+        # Uncomment once QuantLib issue is resolved
+        # process = ql.BlackScholesProcess(spot_handle, dividend_ts, risk_free_ts, volatility_ts)
+        # option = ql.VanillaOption(payoff, exercise)
+        # option.setPricingEngine(ql.AnalyticEuropeanEngine(process))
+        # price = option.NPV()
+        # logger.debug(f"Calculated price: {price}")
+        # return price
     except Exception as e:
         logger.error(f"Error calculating price for symbol {option['symbol']}, strike {option['strike']}: {e}")
         st.warning(f"Error calculating price for symbol {option['symbol']}, strike {option['strike']}: {e}")
@@ -249,6 +257,7 @@ def calculate_strategy_pnl(strategy: List[Dict], spot_range: np.ndarray, time_po
         
         for t_idx, eval_date in enumerate(time_points):
             for s_idx, spot_price in enumerate(spot_range):
+                logger.debug(f"P&L calc: leg={leg['symbol']}, eval_date={eval_date}, spot_price={spot_price}")
                 if leg['type'] == 'stock':
                     if leg['position'] == 'long':
                         pnl[t_idx, s_idx] += (spot_price - leg['strike']) * num_contracts * 100
@@ -445,74 +454,4 @@ elif strategy_page == "Covered Call":
         scene=dict(
             xaxis_title="Time (Ordinal Date)",
             yaxis_title="Underlying Price (ARS)",
-            zaxis_title="P&L (ARS)",
-            xaxis=dict(tickvals=[t.toordinal() for t in time_points], ticktext=[t.strftime('%Y-%m-%d') for t in time_points]),
-            yaxis=dict(range=[st.session_state.debug_plot_range['min_price'], st.session_state.debug_plot_range['max_price']]),
-            zaxis=dict(),
-        ),
-        showlegend=True,
-        width=800,
-        height=600
-    )
-    st.plotly_chart(fig, use_container_width=True)
-    st.metric("Costo Total Estimado (ARS)", f"{total_cost:.2f}")
-
-# Protective Put strategy
-elif strategy_page == "Protective Put":
-    st.header("Protective Put")
-    if not st.session_state.filtered_puts:
-        st.error("No hay puts disponibles para la fecha de vencimiento seleccionada.")
-        st.stop()
-    selected_put = st.selectbox(
-        "Selecciona un Put para comprar",
-        st.session_state.filtered_puts,
-        format_func=lambda x: f"Strike {x['strike']:.2f} (Bid: {x.get('px_bid', 0.0):.2f}, Ask: {x.get('px_ask', 0.0):.2f})"
-    )
-    strategy = [
-        {'type': 'put', 'strike': selected_put['strike'], 'position': 'long', 'px_bid': selected_put.get('px_bid', 0.0), 'px_ask': selected_put.get('px_ask', 0.0), 'symbol': selected_put['symbol'], 'expiration': selected_put['expiration']},
-        {'type': 'stock', 'strike': st.session_state.current_price, 'position': 'long', 'symbol': 'GGAL'}
-    ]
-    
-    # Calculate P&L
-    with st.spinner("Calculando P&L para Protective Put..."):
-        pnl, total_cost = calculate_strategy_pnl(
-            strategy, spot_range, time_points, st.session_state.num_contracts,
-            st.session_state.commission_rate, st.session_state.risk_free_rate, st.session_state.iv, st.session_state.selected_exp
-        )
-    
-    # Create 3D plot
-    X, Y = np.meshgrid([t.toordinal() for t in time_points], spot_range)
-    Z = pnl.T
-    
-    fig = go.Figure()
-    fig.add_trace(go.Surface(x=X, y=Y, z=Z, colorscale='Viridis', name='P&L', showscale=True))
-    fig.add_trace(go.Surface(
-        x=X, y=Y, z=np.zeros_like(Z),
-        colorscale=[[0, 'rgba(255, 0, 0, 0.3)'], [1, 'rgba(255, 0, 0, 0.3)']],
-        showscale=False, name='Breakeven'
-    ))
-    current_price_plane = np.full_like(Z, st.session_state.current_price)
-    fig.add_trace(go.Surface(
-        x=X, y=current_price_plane, z=Z,
-        colorscale=[[0, 'rgba(0, 0, 255, 0.3)'], [1, 'rgba(0, 0, 255, 0.3)']],
-        showscale=False, name='Current Price'
-    ))
-    
-    fig.update_layout(
-        title="Protective Put P&L: Time vs Underlying Price",
-        scene=dict(
-            xaxis_title="Time (Ordinal Date)",
-            yaxis_title="Underlying Price (ARS)",
-            zaxis_title="P&L (ARS)",
-            xaxis=dict(tickvals=[t.toordinal() for t in time_points], ticktext=[t.strftime('%Y-%m-%d') for t in time_points]),
-            yaxis=dict(range=[st.session_state.debug_plot_range['min_price'], st.session_state.debug_plot_range['max_price']]),
-            zaxis=dict(),
-        ),
-        showlegend=True,
-        width=800,
-        height=600
-    )
-    st.plotly_chart(fig, use_container_width=True)
-    st.metric("Costo Total Estimado (ARS)", f"{total_cost:.2f}")
-
-st.info("La configuración ha sido guardada. Por favor, seleccione una página de estrategia en la barra lateral.")
+            zaxis_title
