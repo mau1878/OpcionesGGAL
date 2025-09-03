@@ -230,7 +230,6 @@ def visualize_volatility_3d(result, current_price, expiration_days, iv, key, opt
 
 logger = logging.getLogger(__name__)
 
-
 def create_bullish_spread_table(options, calc_func, num_contracts, commission_rate, is_debit=True):
     data = []
     min_strike = st.session_state.current_price * (1 - st.session_state.plot_range_pct)
@@ -244,10 +243,10 @@ def create_bullish_spread_table(options, calc_func, num_contracts, commission_ra
     ]
     logger.info(f"Filtered options for bullish spread: {[opt['strike'] for opt in filtered_options]}")
     if len(filtered_options) < 2:
-        logger.warning(
-            f"Insufficient valid options: {len(filtered_options)} options after filtering, min_strike={min_strike:.2f}, max_strike={max_strike:.2f}")
+        logger.warning(f"Insufficient valid options: {len(filtered_options)} options after filtering, min_strike={min_strike:.2f}, max_strike={max_strike:.2f}")
         return pd.DataFrame()
 
+    valid_combinations = 0
     for opt1, opt2 in combinations(filtered_options, 2):
         if calc_func.__name__ == "calculate_bull_call_spread":
             long_opt, short_opt = (opt1, opt2) if opt1["strike"] < opt2["strike"] else (opt2, opt1)
@@ -260,27 +259,24 @@ def create_bullish_spread_table(options, calc_func, num_contracts, commission_ra
                 "Max Profit": result["max_profit"],
                 "Max Loss": result["max_loss"],
                 "Breakeven": result["lower_breakeven"],
-                "Cost-to-Profit Ratio": result["max_loss"] / result["max_profit"] if result[
-                                                                                         "max_profit"] > 0 else float(
-                    'inf')
+                "Cost-to-Profit Ratio": result["max_loss"] / result["max_profit"] if result["max_profit"] > 0 else float('inf')
             }
             data.append(((long_opt["strike"], short_opt["strike"]), row))
+            valid_combinations += 1
         else:
             logger.debug(f"Skipping invalid result for strikes {long_opt['strike']}-{short_opt['strike']}: {result}")
     if not data:
-        logger.warning("No valid bullish spreads generated after processing")
+        logger.warning(f"No valid bullish spreads generated after processing. Valid combinations: {valid_combinations}")
         return pd.DataFrame()
     df = pd.DataFrame.from_dict(dict(data), orient='index')
+    logger.debug(f"Initial DataFrame index: {df.index.tolist()}")
     df = df.reset_index()
-    # Match the number of columns after reset_index (2 index levels + 5 data columns)
-    df.columns = ['level_0', 'level_1', 'Net Cost' if is_debit else 'Net Credit', 'Max Profit', 'Max Loss', 'Breakeven',
-                  'Cost-to-Profit Ratio']
-    df['Strikes'] = df.apply(
-        lambda row: f"{row['level_0']:.1f}-{row['level_1']:.1f}" if pd.notna(row['level_0']) and pd.notna(
-            row['level_1']) else str(row.name), axis=1)
+    logger.debug(f"After reset_index, columns: {df.columns.tolist()}")
+    df.columns = ['level_0', 'level_1', 'Net Cost' if is_debit else 'Net Credit', 'Max Profit', 'Max Loss', 'Breakeven', 'Cost-to-Profit Ratio']
+    df['Strikes'] = df.apply(lambda row: f"{row['level_0']:.1f}-{row['level_1']:.1f}" if pd.notna(row['level_0']) and pd.notna(row['level_1']) else str(row.name), axis=1)
     df = df.drop(columns=['level_0', 'level_1'])
+    logger.debug(f"Final Strikes column: {df['Strikes'].tolist()}")
     return df
-
 
 def create_bearish_spread_table(options, calc_func, num_contracts, commission_rate, is_debit=True):
     data = []
@@ -295,45 +291,39 @@ def create_bearish_spread_table(options, calc_func, num_contracts, commission_ra
     ]
     logger.info(f"Filtered options for bearish spread: {[opt['strike'] for opt in filtered_options]}")
     if len(filtered_options) < 2:
-        logger.warning(
-            f"Insufficient valid options: {len(filtered_options)} options after filtering, min_strike={min_strike:.2f}, max_strike={max_strike:.2f}")
+        logger.warning(f"Insufficient valid options: {len(filtered_options)} options after filtering, min_strike={min_strike:.2f}, max_strike={max_strike:.2f}")
         return pd.DataFrame()
 
+    valid_combinations = 0
     for opt1, opt2 in combinations(filtered_options, 2):
         if calc_func.__name__ == "calculate_bear_call_spread":
             short_opt, long_opt = (opt1, opt2) if opt1["strike"] < opt2["strike"] else (opt2, opt1)
         else:  # calculate_bear_put_spread
             long_opt, short_opt = (opt1, opt2) if opt1["strike"] > opt2["strike"] else (opt2, opt1)
-        result = calc_func(short_opt, long_opt, num_contracts,
-                           commission_rate) if calc_func.__name__ == "calculate_bear_call_spread" else calc_func(
-            long_opt, short_opt, num_contracts, commission_rate)
+        result = calc_func(short_opt, long_opt, num_contracts, commission_rate) if calc_func.__name__ == "calculate_bear_call_spread" else calc_func(long_opt, short_opt, num_contracts, commission_rate)
         if result and isinstance(result, dict) and "lower_breakeven" in result:
             row = {
                 "Net Cost" if is_debit else "Net Credit": result["net_cost"] if is_debit else -result["net_cost"],
                 "Max Profit": result["max_profit"],
                 "Max Loss": result["max_loss"],
                 "Breakeven": result["lower_breakeven"],
-                "Cost-to-Profit Ratio": result["max_loss"] / result["max_profit"] if result[
-                                                                                         "max_profit"] > 0 else float(
-                    'inf')
+                "Cost-to-Profit Ratio": result["max_loss"] / result["max_profit"] if result["max_profit"] > 0 else float('inf')
             }
-            data.append(
-                ((short_opt["strike"], long_opt["strike"]) if calc_func.__name__ == "calculate_bear_call_spread" else (
-                    long_opt["strike"], short_opt["strike"]), row))
+            data.append(((short_opt["strike"], long_opt["strike"]) if calc_func.__name__ == "calculate_bear_call_spread" else (long_opt["strike"], short_opt["strike"]), row))
+            valid_combinations += 1
         else:
             logger.debug(f"Skipping invalid result for strikes {short_opt['strike']}-{long_opt['strike']}: {result}")
     if not data:
-        logger.warning("No valid bearish spreads generated after processing")
+        logger.warning(f"No valid bearish spreads generated after processing. Valid combinations: {valid_combinations}")
         return pd.DataFrame()
     df = pd.DataFrame.from_dict(dict(data), orient='index')
+    logger.debug(f"Initial DataFrame index: {df.index.tolist()}")
     df = df.reset_index()
-    # Match the number of columns after reset_index (2 index levels + 5 data columns)
-    df.columns = ['level_0', 'level_1', 'Net Cost' if is_debit else 'Net Credit', 'Max Profit', 'Max Loss', 'Breakeven',
-                  'Cost-to-Profit Ratio']
-    df['Strikes'] = df.apply(
-        lambda row: f"{row['level_0']:.1f}-{row['level_1']:.1f}" if pd.notna(row['level_0']) and pd.notna(
-            row['level_1']) else str(row.name), axis=1)
+    logger.debug(f"After reset_index, columns: {df.columns.tolist()}")
+    df.columns = ['level_0', 'level_1', 'Net Cost' if is_debit else 'Net Credit', 'Max Profit', 'Max Loss', 'Breakeven', 'Cost-to-Profit Ratio']
+    df['Strikes'] = df.apply(lambda row: f"{row['level_0']:.1f}-{row['level_1']:.1f}" if pd.notna(row['level_0']) and pd.notna(row['level_1']) else str(row.name), axis=1)
     df = df.drop(columns=['level_0', 'level_1'])
+    logger.debug(f"Final Strikes column: {df['Strikes'].tolist()}")
     return df
 
 def create_neutral_table(options, calc_func, num_contracts, commission_rate, num_legs):

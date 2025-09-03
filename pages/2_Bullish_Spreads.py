@@ -39,6 +39,7 @@ logger.info(f"Puts data: {[{k: v for k, v in opt.items()} for opt in puts]}")
 tab1, tab2 = st.tabs(["Bull Call Spread", "Bull Put Spread"])
 
 # Bull Call Spread
+# Bull Call Spread
 with tab1:
     st.header("Bull Call Spread (Débito)")
     st.subheader("Análisis Detallado por Ratio")
@@ -58,16 +59,18 @@ with tab1:
             edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}")
         edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: f"{x:.2f}")
 
-        # Ensure simple index
+        # Ensure simple index and preserve Strikes column
         if isinstance(edited_df.index, pd.MultiIndex):
             edited_df = edited_df.reset_index()
             edited_df['Strikes'] = edited_df.apply(
-                lambda row: f"{row['level_0']}-{row['level_1']}",
+                lambda row: f"{row['level_0']:.1f}-{row['level_1']:.1f}" if pd.notna(row['level_0']) and pd.notna(row['level_1']) else row['Strikes'],
                 axis=1
             )
             edited_df = edited_df.drop(columns=['level_0', 'level_1'])
         else:
-            edited_df['Strikes'] = edited_df.index.astype(str)
+            # If not MultiIndex, use existing Strikes or fallback to index
+            if 'Strikes' not in edited_df.columns or edited_df['Strikes'].iloc[0].isdigit():
+                edited_df['Strikes'] = edited_df.index.astype(str)
             edited_df = edited_df.reset_index(drop=True)
 
         # Sort DataFrame
@@ -89,26 +92,24 @@ with tab1:
 
         # Create selectbox options with row index
         strike_options = [f"{idx:02d}: {row['Strikes']}" for idx, row in edited_df.iterrows()]
+        logger.debug(f"Strike options: {strike_options}")
         selected_option = st.selectbox(
             "Select Strikes for 3D Visualization",
             [""] + strike_options,
             key="bull_call_spread_visualize_select"
         )
-        # Replace the 'if selected_option:' block in each tab
-        # Bull Call Spread tab
         if selected_option:
             try:
                 logger.debug(f"Selected option: {selected_option}")
                 idx_str, strikes_str = selected_option.split(": ", 1)
                 idx = int(idx_str)
-                # Parse strikes from the Strikes column value
                 if idx < len(edited_df):
                     strikes = [float(s.strip()) for s in strikes_str.split('-')]
                     if len(strikes) != 2:
                         logger.error(f"Invalid strikes format: {strikes_str}")
                         st.error("Formato de strikes inválido. Se esperaban 2 strikes (strike1-strike2).")
                     else:
-                        long_strike, short_strike = strikes  # For Bull Call Spread, long is lower, short is higher
+                        long_strike, short_strike = strikes
                         logger.debug(f"Parsed strikes: long={long_strike}, short={short_strike}")
                         long_opt = next((opt for opt in calls if opt["strike"] == long_strike), None)
                         short_opt = next((opt for opt in calls if opt["strike"] == short_strike), None)
@@ -122,8 +123,7 @@ with tab1:
                                     f"Bull Call Spread {long_strike:.1f}-{short_strike:.1f}",
                                     [long_opt, short_opt], ["buy", "sell"]
                                 )
-                                logger.info(
-                                    f"3D plot generated for Bull Call Spread {long_strike:.1f}-{short_strike:.1f}")
+                                logger.info(f"3D plot generated for Bull Call Spread {long_strike:.1f}-{short_strike:.1f}")
                             else:
                                 st.error("Cálculo inválido para esta combinación.")
                                 logger.error("Invalid calculation for Bull Call Spread")
@@ -139,9 +139,6 @@ with tab1:
             except Exception as e:
                 st.error(f"Error inesperado: {e}")
                 logger.error(f"Unexpected error in selectbox handling: {e}")
-
-
-
 
     else:
         st.warning("No hay datos disponibles para Bull Call Spread. Asegúrese de que hay suficientes opciones call en el rango seleccionado o intente actualizar los datos.")
@@ -161,7 +158,7 @@ with tab1:
         st.error(f"Error al crear la matriz de costos: {e}")
         logger.error(f"Error in create_spread_matrix: {e}")
 
-# Bull Put Spread
+# Bull Put Spread (similar update)
 with tab2:
     st.header("Bull Put Spread (Crédito)")
     st.subheader("Análisis Detallado por Ratio")
@@ -175,25 +172,23 @@ with tab2:
         detailed_df_put = pd.DataFrame()
 
     if not detailed_df_put.empty:
-        # Apply formatting to the DataFrame
         edited_df = detailed_df_put.copy()
         for col in ["Net Credit", "Max Profit", "Max Loss", "Breakeven"]:
             edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}")
         edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: f"{x:.2f}")
 
-        # Ensure simple index
         if isinstance(edited_df.index, pd.MultiIndex):
             edited_df = edited_df.reset_index()
             edited_df['Strikes'] = edited_df.apply(
-                lambda row: f"{row['level_0']}-{row['level_1']}",
+                lambda row: f"{row['level_0']:.1f}-{row['level_1']:.1f}" if pd.notna(row['level_0']) and pd.notna(row['level_1']) else row['Strikes'],
                 axis=1
             )
             edited_df = edited_df.drop(columns=['level_0', 'level_1'])
         else:
-            edited_df['Strikes'] = edited_df.index.astype(str)
+            if 'Strikes' not in edited_df.columns or edited_df['Strikes'].iloc[0].isdigit():
+                edited_df['Strikes'] = edited_df.index.astype(str)
             edited_df = edited_df.reset_index(drop=True)
 
-        # Sort DataFrame
         if "Breakeven Probability" in st.session_state and st.session_state.get("sort_by") == "Breakeven Probability":
             edited_df['Breakeven Probability'] = edited_df.apply(
                 lambda row: norm.cdf((np.log(float(row['Breakeven']) / current_price) - risk_free_rate * expiration_days / 365.0) /
@@ -203,35 +198,30 @@ with tab2:
         else:
             edited_df = edited_df.sort_values(by="Cost-to-Profit Ratio")
 
-        # Store DataFrame in session state
         st.session_state["bull_put_df"] = edited_df.copy()
 
-        # Display DataFrame with index
         st.write("Select a row by its index to visualize the 3D payoff plot.")
         st.dataframe(edited_df, use_container_width=True, hide_index=False)
 
-        # Create selectbox options with row index
         strike_options = [f"{idx:02d}: {row['Strikes']}" for idx, row in edited_df.iterrows()]
+        logger.debug(f"Strike options: {strike_options}")
         selected_option = st.selectbox(
             "Select Strikes for 3D Visualization",
             [""] + strike_options,
             key="bull_put_spread_visualize_select"
         )
-        # Replace the 'if selected_option:' block in each tab
-        # Bull Put Spread tab
         if selected_option:
             try:
                 logger.debug(f"Selected option: {selected_option}")
                 idx_str, strikes_str = selected_option.split(": ", 1)
                 idx = int(idx_str)
-                # Parse strikes from the Strikes column value
                 if idx < len(edited_df):
                     strikes = [float(s.strip()) for s in strikes_str.split('-')]
                     if len(strikes) != 2:
                         logger.error(f"Invalid strikes format: {strikes_str}")
                         st.error("Formato de strikes inválido. Se esperaban 2 strikes (strike1-strike2).")
                     else:
-                        short_strike, long_strike = strikes  # For Bull Put Spread, short is higher, long is lower
+                        short_strike, long_strike = strikes
                         logger.debug(f"Parsed strikes: short={short_strike}, long={long_strike}")
                         short_opt = next((opt for opt in puts if opt["strike"] == short_strike), None)
                         long_opt = next((opt for opt in puts if opt["strike"] == long_strike), None)
@@ -245,8 +235,7 @@ with tab2:
                                     f"Bull Put Spread {short_strike:.1f}-{long_strike:.1f}",
                                     [short_opt, long_opt], ["sell", "buy"]
                                 )
-                                logger.info(
-                                    f"3D plot generated for Bull Put Spread {short_strike:.1f}-{long_strike:.1f}")
+                                logger.info(f"3D plot generated for Bull Put Spread {short_strike:.1f}-{long_strike:.1f}")
                             else:
                                 st.error("Cálculo inválido para esta combinación.")
                                 logger.error("Invalid calculation for Bull Put Spread")
@@ -263,9 +252,8 @@ with tab2:
                 st.error(f"Error inesperado: {e}")
                 logger.error(f"Unexpected error in selectbox handling: {e}")
 
-
-        st.warning("No hay datos disponibles para Bull Put Spread. Asegúrese de que hay suficientes opciones put en el rango seleccionado o intente actualizar los datos.")
-        logger.warning(f"No data for Bull Put Spread. Filtered puts: {len(puts)}, Strikes: {min_strike:.2f}-{max_strike:.2f}, Expiration: {st.session_state.selected_exp}")
+    st.warning("No hay datos disponibles para Bull Put Spread. Asegúrese de que hay suficientes opciones put en el rango seleccionado o intente actualizar los datos.")
+    logger.warning(f"No data for Bull Put Spread. Filtered puts: {len(puts)}, Strikes: {min_strike:.2f}-{max_strike:.2f}, Expiration: {st.session_state.selected_exp}")
 
     st.subheader("Matriz de Crédito Neto (Venta en Fila, Compra en Columna)")
     try:
