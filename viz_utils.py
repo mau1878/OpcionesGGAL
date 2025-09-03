@@ -229,6 +229,8 @@ def visualize_volatility_3d(result, current_price, expiration_days, iv, key, opt
 
 logger = logging.getLogger(__name__)
 
+logger = logging.getLogger(__name__)
+
 def create_bullish_spread_table(options, calc_func, num_contracts, commission_rate, is_debit=True):
     data = []
     min_strike = st.session_state.current_price * (1 - st.session_state.plot_range_pct)
@@ -266,7 +268,7 @@ def create_bullish_spread_table(options, calc_func, num_contracts, commission_ra
     if not df.empty:
         df = df.reset_index()
         df['Strikes'] = df.apply(
-            lambda row: f"{row['level_0']}-{row['level_1']}" if isinstance(row['level_0'], (int, float)) and isinstance(row['level_1'], (int, float)) else str(row.name),
+            lambda row: f"{row['level_0']:.1f}-{row['level_1']:.1f}" if isinstance(row['level_0'], (int, float)) and isinstance(row['level_1'], (int, float)) else str(row.name),
             axis=1
         )
         df = df.drop(columns=['level_0', 'level_1']).reset_index(drop=True)
@@ -311,7 +313,7 @@ def create_bearish_spread_table(options, calc_func, num_contracts, commission_ra
     if not df.empty:
         df = df.reset_index()
         df['Strikes'] = df.apply(
-            lambda row: f"{row['level_0']}-{row['level_1']}" if isinstance(row['level_0'], (int, float)) and isinstance(row['level_1'], (int, float)) else str(row.name),
+            lambda row: f"{row['level_0']:.1f}-{row['level_1']:.1f}" if isinstance(row['level_0'], (int, float)) and isinstance(row['level_1'], (int, float)) else str(row.name),
             axis=1
         )
         df = df.drop(columns=['level_0', 'level_1']).reset_index(drop=True)
