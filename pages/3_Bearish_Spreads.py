@@ -58,7 +58,7 @@ with tab1:
             edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}")
         edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: f"{x:.2f}")
 
-        # Convert MultiIndex to a simple index
+        # Ensure simple index
         if isinstance(edited_df.index, pd.MultiIndex):
             edited_df = edited_df.reset_index()
             edited_df['Strikes'] = edited_df.apply(
@@ -96,7 +96,6 @@ with tab1:
         )
         if selected_option:
             try:
-                # Extract index and strikes from selected option
                 idx_str, strikes_str = selected_option.split(": ", 1)
                 idx = int(idx_str)
                 strikes = [float(s) for s in strikes_str.split('-')]
@@ -167,7 +166,7 @@ with tab2:
             edited_df[col] = edited_df[col].apply(lambda x: f"{x:.2f}")
         edited_df["Cost-to-Profit Ratio"] = edited_df["Cost-to-Profit Ratio"].apply(lambda x: f"{x:.2f}")
 
-        # Convert MultiIndex to a simple index
+        # Ensure simple index
         if isinstance(edited_df.index, pd.MultiIndex):
             edited_df = edited_df.reset_index()
             edited_df['Strikes'] = edited_df.apply(
@@ -205,7 +204,6 @@ with tab2:
         )
         if selected_option:
             try:
-                # Extract index and strikes from selected option
                 idx_str, strikes_str = selected_option.split(": ", 1)
                 idx = int(idx_str)
                 strikes = [float(s) for s in strikes_str.split('-')]

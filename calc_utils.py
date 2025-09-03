@@ -20,9 +20,6 @@ def calculate_fees(base_cost: float, commission_rate: float) -> float:
     return commission + market_fees + vat
 
 def calculate_strategy_cost(options, actions, contracts, commission_rate):
-    """
-    Generalized cost calculation for any strategy. Returns None if invalid.
-    """
     if len(options) != len(actions) or len(options) != len(contracts):
         logger.warning(f"Mismatch in options ({len(options)}), actions ({len(actions)}), contracts ({len(contracts)})")
         return None
@@ -34,7 +31,7 @@ def calculate_strategy_cost(options, actions, contracts, commission_rate):
         if px_bid <= 0 or px_ask <= 0 or px_bid > px_ask:
             logger.debug(f"Invalid bid/ask for {opt['symbol']}: bid={px_bid}, ask={px_ask}")
             return None
-        mid_price = (px_bid + px_ask) / 2  # Use mid-price for realism
+        mid_price = (px_bid + px_ask) / 2
         spread_pct = abs(px_ask - px_bid) / mid_price
         if spread_pct > 0.2:
             logger.debug(f"Wide spread ({spread_pct:.1%}) for {opt['symbol']}")
@@ -53,15 +50,6 @@ def calculate_strategy_cost(options, actions, contracts, commission_rate):
     return {"raw_net": raw_net, "net_cost": total_cost}
 
 def black_scholes(S, K, T, r, sigma, option_type):
-    """
-    Black-Scholes option pricing model.
-    S: Current stock price
-    K: Strike price
-    T: Time to expiration (in years)
-    r: Risk-free rate
-    sigma: Volatility
-    option_type: 'call' or 'put'
-    """
     try:
         if T <= 0 or sigma <= 0 or S <= 0 or K <= 0:
             return intrinsic_value(S, K, option_type)
@@ -77,18 +65,11 @@ def black_scholes(S, K, T, r, sigma, option_type):
         return intrinsic_value(S, K, option_type)
 
 def intrinsic_value(S, K, option_type):
-    """
-    Calculate intrinsic value of an option.
-    """
     if option_type == "call":
         return max(0, S - K)
     return max(0, K - S)
 
 def _calculate_iv(raw_net, current_price, expiration_days, strategy_value_func, options, option_actions, contract_ratios=None):
-    """
-    Calculate implied volatility for a strategy by minimizing the difference between
-    market price (raw_net) and Black-Scholes price.
-    """
     if not contract_ratios:
         contract_ratios = [1] * len(options)
     
@@ -104,7 +85,7 @@ def _calculate_iv(raw_net, current_price, expiration_days, strategy_value_func, 
     try:
         result = minimize_scalar(
             objective_function,
-            bounds=(0.01, 2.0),  # Reasonable IV range
+            bounds=(0.01, 2.0),
             method='bounded',
             options={'xatol': 1e-6, 'maxiter': 100}
         )
@@ -121,10 +102,14 @@ def _calculate_iv(raw_net, current_price, expiration_days, strategy_value_func, 
         return DEFAULT_IV
 
 def calculate_bull_call_spread(long_call, short_call, num_contracts, commission_rate):
-    if long_call["strike"] >= short_call["strike"]: return None
+    if long_call["strike"] >= short_call["strike"]: 
+        logger.debug(f"Invalid strike order: long={long_call['strike']}, short={short_call['strike']}")
+        return None
     long_price = get_strategy_price(long_call, "buy")
     short_price = get_strategy_price(short_call, "sell")
-    if any(p is None for p in [long_price, short_price]): return None
+    if any(p is None for p in [long_price, short_price]): 
+        logger.debug(f"Invalid prices: long_price={long_price}, short_price={short_price}")
+        return None
 
     base_cost = (long_price - short_price) * 100 * num_contracts
     total_fees = calculate_fees(long_price * 100 * num_contracts, commission_rate) + \
@@ -132,7 +117,6 @@ def calculate_bull_call_spread(long_call, short_call, num_contracts, commission_
     net_cost = base_cost + total_fees
     max_loss = net_cost
     max_profit = (short_call["strike"] - long_call["strike"] - (net_cost / (100 * num_contracts))) * 100 * num_contracts
-    if max_profit <= 0: return None
     lower_breakeven = long_call["strike"] + (net_cost / (100 * num_contracts))
     return {
         "raw_net": base_cost,
@@ -146,10 +130,14 @@ def calculate_bull_call_spread(long_call, short_call, num_contracts, commission_
     }
 
 def calculate_bull_put_spread(short_put, long_put, num_contracts, commission_rate):
-    if short_put["strike"] <= long_put["strike"]: return None
+    if short_put["strike"] <= long_put["strike"]: 
+        logger.debug(f"Invalid strike order: short={short_put['strike']}, long={long_put['strike']}")
+        return None
     short_price = get_strategy_price(short_put, "sell")
     long_price = get_strategy_price(long_put, "buy")
-    if any(p is None for p in [short_price, long_price]): return None
+    if any(p is None for p in [short_price, long_price]): 
+        logger.debug(f"Invalid prices: short_price={short_price}, long_price={long_price}")
+        return None
 
     base_cost = (long_price - short_price) * 100 * num_contracts
     total_fees = calculate_fees(long_price * 100 * num_contracts, commission_rate) + \
@@ -157,7 +145,6 @@ def calculate_bull_put_spread(short_put, long_put, num_contracts, commission_rat
     net_cost = base_cost + total_fees
     max_loss = ((short_put["strike"] - long_put["strike"]) * 100 * num_contracts) - net_cost
     max_profit = -net_cost
-    if max_profit <= 0: return None
     lower_breakeven = long_put["strike"] + (net_cost / (100 * num_contracts))
     return {
         "raw_net": base_cost,
@@ -199,10 +186,14 @@ def calculate_bear_call_spread(short_call, long_call, num_contracts, commission_
     }
 
 def calculate_bear_put_spread(long_put, short_put, num_contracts, commission_rate):
-    if long_put["strike"] <= short_put["strike"]: return None
+    if long_put["strike"] <= short_put["strike"]: 
+        logger.debug(f"Invalid strike order: long={long_put['strike']}, short={short_put['strike']}")
+        return None
     long_price = get_strategy_price(long_put, "buy")
     short_price = get_strategy_price(short_put, "sell")
-    if any(p is None for p in [long_price, short_price]): return None
+    if any(p is None for p in [long_price, short_price]): 
+        logger.debug(f"Invalid prices: long_price={long_price}, short_price={short_price}")
+        return None
 
     base_cost = (long_price - short_price) * 100 * num_contracts
     total_fees = calculate_fees(long_price * 100 * num_contracts, commission_rate) + \
@@ -210,7 +201,6 @@ def calculate_bear_put_spread(long_put, short_put, num_contracts, commission_rat
     net_cost = base_cost + total_fees
     max_loss = net_cost
     max_profit = (long_put["strike"] - short_put["strike"] - (net_cost / (100 * num_contracts))) * 100 * num_contracts
-    if max_profit <= 0: return None
     upper_breakeven = long_put["strike"] - (net_cost / (100 * num_contracts))
     return {
         "raw_net": base_cost,
@@ -224,11 +214,15 @@ def calculate_bear_put_spread(long_put, short_put, num_contracts, commission_rat
     }
 
 def calculate_call_butterfly(long_low, short_mid, long_high, num_contracts, commission_rate):
-    if not (long_low["strike"] < short_mid["strike"] < long_high["strike"]): return None
+    if not (long_low["strike"] < short_mid["strike"] < long_high["strike"]): 
+        logger.debug(f"Invalid strike order: low={long_low['strike']}, mid={short_mid['strike']}, high={long_high['strike']}")
+        return None
     long_low_price = get_strategy_price(long_low, "buy")
     short_mid_price = get_strategy_price(short_mid, "sell")
     long_high_price = get_strategy_price(long_high, "buy")
-    if any(p is None for p in [long_low_price, short_mid_price, long_high_price]): return None
+    if any(p is None for p in [long_low_price, short_mid_price, long_high_price]): 
+        logger.debug(f"Invalid prices: low={long_low_price}, mid={short_mid_price}, high={long_high_price}")
+        return None
 
     base_cost = (long_low_price + long_high_price - 2 * short_mid_price) * 100 * num_contracts
     total_fees = calculate_fees(long_low_price * 100 * num_contracts, commission_rate) + \
@@ -252,11 +246,15 @@ def calculate_call_butterfly(long_low, short_mid, long_high, num_contracts, comm
     }
 
 def calculate_put_butterfly(long_high, short_mid, long_low, num_contracts, commission_rate):
-    if not (long_low["strike"] < short_mid["strike"] < long_high["strike"]): return None
+    if not (long_low["strike"] < short_mid["strike"] < long_high["strike"]): 
+        logger.debug(f"Invalid strike order: low={long_low['strike']}, mid={short_mid['strike']}, high={long_high['strike']}")
+        return None
     long_high_price = get_strategy_price(long_high, "buy")
     short_mid_price = get_strategy_price(short_mid, "sell")
     long_low_price = get_strategy_price(long_low, "buy")
-    if any(p is None for p in [long_high_price, short_mid_price, long_low_price]): return None
+    if any(p is None for p in [long_high_price, short_mid_price, long_low_price]): 
+        logger.debug(f"Invalid prices: high={long_high_price}, mid={short_mid_price}, low={long_low_price}")
+        return None
 
     base_cost = (long_high_price + long_low_price - 2 * short_mid_price) * 100 * num_contracts
     total_fees = calculate_fees(long_high_price * 100 * num_contracts, commission_rate) + \
@@ -280,12 +278,16 @@ def calculate_put_butterfly(long_high, short_mid, long_low, num_contracts, commi
     }
 
 def calculate_call_condor(long_low, short_mid_low, short_mid_high, long_high, num_contracts, commission_rate):
-    if not (long_low["strike"] < short_mid_low["strike"] < short_mid_high["strike"] < long_high["strike"]): return None
+    if not (long_low["strike"] < short_mid_low["strike"] < short_mid_high["strike"] < long_high["strike"]): 
+        logger.debug(f"Invalid strike order: low={long_low['strike']}, mid_low={short_mid_low['strike']}, mid_high={short_mid_high['strike']}, high={long_high['strike']}")
+        return None
     long_low_price = get_strategy_price(long_low, "buy")
     short_mid_low_price = get_strategy_price(short_mid_low, "sell")
     short_mid_high_price = get_strategy_price(short_mid_high, "sell")
     long_high_price = get_strategy_price(long_high, "buy")
-    if any(p is None for p in [long_low_price, short_mid_low_price, short_mid_high_price, long_high_price]): return None
+    if any(p is None for p in [long_low_price, short_mid_low_price, short_mid_high_price, long_high_price]): 
+        logger.debug(f"Invalid prices: low={long_low_price}, mid_low={short_mid_low_price}, mid_high={short_mid_high_price}, high={long_high_price}")
+        return None
 
     base_cost = (long_low_price + long_high_price - short_mid_low_price - short_mid_high_price) * 100 * num_contracts
     total_fees = calculate_fees(long_low_price * 100 * num_contracts, commission_rate) + \
@@ -310,12 +312,16 @@ def calculate_call_condor(long_low, short_mid_low, short_mid_high, long_high, nu
     }
 
 def calculate_put_condor(long_high, short_mid_high, short_mid_low, long_low, num_contracts, commission_rate):
-    if not (long_low["strike"] < short_mid_low["strike"] < short_mid_high["strike"] < long_high["strike"]): return None
+    if not (long_low["strike"] < short_mid_low["strike"] < short_mid_high["strike"] < long_high["strike"]): 
+        logger.debug(f"Invalid strike order: low={long_low['strike']}, mid_low={short_mid_low['strike']}, mid_high={short_mid_high['strike']}, high={long_high['strike']}")
+        return None
     long_high_price = get_strategy_price(long_high, "buy")
     short_mid_high_price = get_strategy_price(short_mid_high, "sell")
     short_mid_low_price = get_strategy_price(short_mid_low, "sell")
     long_low_price = get_strategy_price(long_low, "buy")
-    if any(p is None for p in [long_high_price, short_mid_high_price, short_mid_low_price, long_low_price]): return None
+    if any(p is None for p in [long_high_price, short_mid_high_price, short_mid_low_price, long_low_price]): 
+        logger.debug(f"Invalid prices: high={long_high_price}, mid_high={short_mid_high_price}, mid_low={short_mid_low_price}, low={long_low_price}")
+        return None
 
     base_cost = (long_high_price + long_low_price - short_mid_high_price - short_mid_low_price) * 100 * num_contracts
     total_fees = calculate_fees(long_high_price * 100 * num_contracts, commission_rate) + \
@@ -340,10 +346,14 @@ def calculate_put_condor(long_high, short_mid_high, short_mid_low, long_low, num
     }
 
 def calculate_straddle(call_opt, put_opt, num_contracts, commission_rate):
-    if call_opt["strike"] != put_opt["strike"]: return None
+    if call_opt["strike"] != put_opt["strike"]: 
+        logger.debug(f"Invalid strike order: call={call_opt['strike']}, put={put_opt['strike']}")
+        return None
     call_price = get_strategy_price(call_opt, "buy")
     put_price = get_strategy_price(put_opt, "buy")
-    if any(p is None for p in [call_price, put_price]): return None
+    if any(p is None for p in [call_price, put_price]): 
+        logger.debug(f"Invalid prices: call_price={call_price}, put_price={put_price}")
+        return None
 
     base_cost = (call_price + put_price) * 100 * num_contracts
     total_fees = calculate_fees(call_price * 100 * num_contracts, commission_rate) + \
@@ -374,10 +384,14 @@ def calculate_straddle(call_opt, put_opt, num_contracts, commission_rate):
     }
 
 def calculate_strangle(put_opt, call_opt, num_contracts, commission_rate):
-    if put_opt["strike"] >= call_opt["strike"]: return None
+    if put_opt["strike"] >= call_opt["strike"]: 
+        logger.debug(f"Invalid strike order: put={put_opt['strike']}, call={call_opt['strike']}")
+        return None
     put_price = get_strategy_price(put_opt, "buy")
     call_price = get_strategy_price(call_opt, "buy")
-    if any(p is None for p in [put_price, call_price]): return None
+    if any(p is None for p in [put_price, call_price]): 
+        logger.debug(f"Invalid prices: put_price={put_price}, call_price={call_price}")
+        return None
 
     base_cost = (put_price + call_price) * 100 * num_contracts
     total_fees = calculate_fees(put_price * 100 * num_contracts, commission_rate) + \

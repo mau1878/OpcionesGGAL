@@ -229,29 +229,38 @@ def visualize_volatility_3d(result, current_price, expiration_days, iv, key, opt
 
 def create_bullish_spread_table(options, calc_func, num_contracts, commission_rate, is_debit=True):
     data = []
-    # Filter options by strike range
     min_strike = st.session_state.current_price * (1 - st.session_state.plot_range_pct)
     max_strike = st.session_state.current_price * (1 + st.session_state.plot_range_pct)
-    filtered_options = [opt for opt in options if min_strike <= opt["strike"] <= max_strike]
-    logger.info(f"Filtered options: {[opt['strike'] for opt in filtered_options]}")
+    filtered_options = [
+        opt for opt in options 
+        if min_strike <= opt["strike"] <= max_strike and 
+        opt.get("px_bid", 0) > 0 and 
+        opt.get("px_ask", 0) > 0 and 
+        opt.get("px_ask", 0) >= opt.get("px_bid", 0)
+    ]
+    logger.info(f"Filtered options for bullish spread: {[opt['strike'] for opt in filtered_options]}")
     if len(filtered_options) < 2:
-        logger.warning("Insufficient options for spread calculation")
+        logger.warning(f"Insufficient valid options: {len(filtered_options)} options after filtering, min_strike={min_strike:.2f}, max_strike={max_strike:.2f}")
         return pd.DataFrame()
     
-    for long_opt, short_opt in combinations(filtered_options, 2):
-        if long_opt["strike"] < short_opt["strike"]:
-            result = calc_func(long_opt, short_opt, num_contracts, commission_rate)
-            if result and isinstance(result, dict) and "breakeven" in result and result["max_profit"] > 0:
-                row = {
-                    "Net Cost" if is_debit else "Net Credit": result["net_cost"] if is_debit else -result["net_cost"],
-                    "Max Profit": result["max_profit"],
-                    "Max Loss": result["max_loss"],
-                    "Breakeven": result["breakeven"],
-                    "Cost-to-Profit Ratio": result["max_loss"] / result["max_profit"] if result["max_profit"] > 0 else float('inf')
-                }
-                data.append(((long_opt["strike"], short_opt["strike"]), row))
-            else:
-                logger.debug(f"Skipping invalid result for strikes {long_opt['strike']}-{short_opt['strike']}: {result}")
+    for opt1, opt2 in combinations(filtered_options, 2):
+        # Determine long and short options based on strategy
+        if calc_func.__name__ == "calculate_bull_call_spread":
+            long_opt, short_opt = (opt1, opt2) if opt1["strike"] < opt2["strike"] else (opt2, opt1)
+        else:  # calculate_bull_put_spread
+            short_opt, long_opt = (opt1, opt2) if opt1["strike"] > opt2["strike"] else (opt2, opt1)
+        result = calc_func(long_opt, short_opt, num_contracts, commission_rate)
+        if result and isinstance(result, dict) and "lower_breakeven" in result:
+            row = {
+                "Net Cost" if is_debit else "Net Credit": result["net_cost"] if is_debit else -result["net_cost"],
+                "Max Profit": result["max_profit"],
+                "Max Loss": result["max_loss"],
+                "Breakeven": result["lower_breakeven"],
+                "Cost-to-Profit Ratio": result["max_loss"] / result["max_profit"] if result["max_profit"] > 0 else float('inf')
+            }
+            data.append(((long_opt["strike"], short_opt["strike"]), row))
+        else:
+            logger.debug(f"Skipping invalid result for strikes {long_opt['strike']}-{short_opt['strike']}: {result}")
     df = pd.DataFrame.from_dict(dict(data), orient='index') if data else pd.DataFrame()
     if not df.empty:
         df = df.reset_index()
@@ -260,33 +269,44 @@ def create_bullish_spread_table(options, calc_func, num_contracts, commission_ra
             axis=1
         )
         df = df.drop(columns=['level_0', 'level_1']).reset_index(drop=True)
+    else:
+        logger.warning("No valid bullish spreads generated after processing")
     return df
 
 def create_bearish_spread_table(options, calc_func, num_contracts, commission_rate, is_debit=True):
     data = []
-    # Filter options by strike range
     min_strike = st.session_state.current_price * (1 - st.session_state.plot_range_pct)
     max_strike = st.session_state.current_price * (1 + st.session_state.plot_range_pct)
-    filtered_options = [opt for opt in options if min_strike <= opt["strike"] <= max_strike]
+    filtered_options = [
+        opt for opt in options 
+        if min_strike <= opt["strike"] <= max_strike and 
+        opt.get("px_bid", 0) > 0 and 
+        opt.get("px_ask", 0) > 0 and 
+        opt.get("px_ask", 0) >= opt.get("px_bid", 0)
+    ]
     logger.info(f"Filtered options for bearish spread: {[opt['strike'] for opt in filtered_options]}")
     if len(filtered_options) < 2:
-        logger.warning("Insufficient options for bearish spread calculation")
+        logger.warning(f"Insufficient valid options: {len(filtered_options)} options after filtering, min_strike={min_strike:.2f}, max_strike={max_strike:.2f}")
         return pd.DataFrame()
     
-    for short_opt, long_opt in combinations(filtered_options, 2):
-        if short_opt["strike"] < long_opt["strike"]:
-            result = calc_func(short_opt, long_opt, num_contracts, commission_rate)
-            if result and isinstance(result, dict) and "breakeven" in result and result["max_profit"] > 0:
-                row = {
-                    "Net Cost" if is_debit else "Net Credit": result["net_cost"] if is_debit else -result["net_cost"],
-                    "Max Profit": result["max_profit"],
-                    "Max Loss": result["max_loss"],
-                    "Breakeven": result["breakeven"],
-                    "Cost-to-Profit Ratio": result["max_loss"] / result["max_profit"] if result["max_profit"] > 0 else float('inf')
-                }
-                data.append(((short_opt["strike"], long_opt["strike"]), row))
-            else:
-                logger.debug(f"Skipping invalid result for strikes {short_opt['strike']}-{long_opt['strike']}: {result}")
+    for opt1, opt2 in combinations(filtered_options, 2):
+        # Determine long and short options based on strategy
+        if calc_func.__name__ == "calculate_bear_call_spread":
+            short_opt, long_opt = (opt1, opt2) if opt1["strike"] < opt2["strike"] else (opt2, opt1)
+        else:  # calculate_bear_put_spread
+            long_opt, short_opt = (opt1, opt2) if opt1["strike"] > opt2["strike"] else (opt2, opt1)
+        result = calc_func(short_opt, long_opt, num_contracts, commission_rate) if calc_func.__name__ == "calculate_bear_call_spread" else calc_func(long_opt, short_opt, num_contracts, commission_rate)
+        if result and isinstance(result, dict) and "lower_breakeven" in result:
+            row = {
+                "Net Cost" if is_debit else "Net Credit": result["net_cost"] if is_debit else -result["net_cost"],
+                "Max Profit": result["max_profit"],
+                "Max Loss": result["max_loss"],
+                "Breakeven": result["lower_breakeven"],
+                "Cost-to-Profit Ratio": result["max_loss"] / result["max_profit"] if result["max_profit"] > 0 else float('inf')
+            }
+            data.append(((short_opt["strike"], long_opt["strike"]) if calc_func.__name__ == "calculate_bear_call_spread" else (long_opt["strike"], short_opt["strike"]), row))
+        else:
+            logger.debug(f"Skipping invalid result for strikes {opt1['strike']}-{opt2['strike']}: {result}")
     df = pd.DataFrame.from_dict(dict(data), orient='index') if data else pd.DataFrame()
     if not df.empty:
         df = df.reset_index()
@@ -295,6 +315,8 @@ def create_bearish_spread_table(options, calc_func, num_contracts, commission_ra
             axis=1
         )
         df = df.drop(columns=['level_0', 'level_1']).reset_index(drop=True)
+    else:
+        logger.warning("No valid bearish spreads generated after processing")
     return df
 
 def create_neutral_table(options, calc_func, num_contracts, commission_rate, num_legs):
