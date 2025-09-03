@@ -59,6 +59,7 @@ nearest_puts = sorted(puts, key=lambda o: abs(o["strike"] - current_price))[:max
 tab1, tab2 = st.tabs(["Straddle", "Strangle"])
 
 # Straddle
+# Straddle
 with tab1:
     st.header("Straddle (Débito)")
     st.subheader("Análisis Detallado por Ratio")
@@ -81,11 +82,9 @@ with tab1:
         # Convert index to a simple index
         if isinstance(edited_df.index, pd.MultiIndex):
             edited_df = edited_df.reset_index()
-            edited_df['Strikes'] = edited_df.apply(
-                lambda row: f"{row['level_0']}",
-                axis=1
-            )
+            edited_df['Strikes'] = edited_df['level_0'].astype(str)  # Convert strike to string
             edited_df = edited_df.drop(columns=['level_0'])
+            edited_df = edited_df.reset_index(drop=True)  # Ensure integer indices
 
         # Add a visualization column
         edited_df['Visualize'] = False
@@ -131,13 +130,13 @@ with tab1:
         st.session_state["straddle_df"] = edited_df.copy()
 
         # Sync visualize flags to DataFrame
-        for idx in edited_df.index:
+        for idx in range(len(edited_df)):
             edited_df.at[idx, 'Visualize'] = st.session_state["visualize_flags_straddle"][idx]
 
         # Sort DataFrame
         if sort_by == "Breakeven Probability":
             edited_df['Breakeven Probability'] = edited_df.apply(
-                lambda row: norm.cdf((np.log(row['upper_breakeven'] / current_price) - risk_free_rate * expiration_days / 365.0) /
+                lambda row: norm.cdf((np.log(float(row['upper_breakeven']) / current_price) - risk_free_rate * expiration_days / 365.0) /
                                      (st.session_state.iv * np.sqrt(expiration_days / 365.0))), axis=1
             )
             edited_df = edited_df.sort_values(by="Breakeven Probability", ascending=False)
@@ -159,7 +158,7 @@ with tab1:
             width='stretch'
         )
         # Update flags after edit
-        for idx in edited_df.index:
+        for idx in range(len(edited_df)):
             st.session_state["visualize_flags_straddle"][idx] = edited_df.at[idx, 'Visualize']
     else:
         st.warning("No hay datos disponibles para Straddle. Asegúrese de que hay suficientes opciones call y put.")
