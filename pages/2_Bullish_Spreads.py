@@ -27,10 +27,11 @@ if not calls or not puts:
     st.stop()
 
 # Initialize session state for visualization flags
+# Initialize session state for visualization flags
 if 'visualize_flags_call' not in st.session_state:
-    st.session_state.visualize_flags_call = [False] * len(calls) * (len(calls) - 1) // 2
+    st.session_state.visualize_flags_call = [False] * (len(calls) * (len(calls) - 1) // 2 if calls else 0)
 if 'visualize_flags_put' not in st.session_state:
-    st.session_state.visualize_flags_put = [False] * len(puts) * (len(puts) - 1) // 2
+    st.session_state.visualize_flags_put = [False] * (len(puts) * (len(puts) - 1) // 2 if puts else 0)
 if 'selected_visualizations_call' not in st.session_state:
     st.session_state.selected_visualizations_call = []
 if 'selected_visualizations_put' not in st.session_state:
