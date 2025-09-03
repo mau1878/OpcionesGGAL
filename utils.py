@@ -710,6 +710,32 @@ def calculate_strategy_value(options, actions, contracts, price, t, sigma):
         total_value += value * num_contracts * 100 * multiplier
     return total_value
 
+def calculate_strategy_cost(options, actions, contracts, commission_rate=None):
+    """
+    Calculate the net cost of an options strategy.
+    
+    Args:
+        options (list): List of option dictionaries with 'bid' and 'ask' prices
+        actions (list): List of actions ("buy" or "sell")
+        contracts (list): List of contract quantities
+        commission_rate (float, optional): Commission rate per contract
+    Returns:
+        float: Net cost of the strategy (positive for debit, negative for credit), or None if invalid
+    """
+    if commission_rate is None:
+        commission_rate = st.session_state.get('commission_rate', 0.0)
+    total_cost = 0.0
+    for opt, action, num_contracts in zip(options, actions, contracts):
+        if 'bid' not in opt or 'ask' not in opt:
+            return None
+        price = opt['ask'] if action == "buy" else opt['bid']
+        if price is None:
+            return None
+        multiplier = 1 if action == "buy" else -1
+        total_cost += price * num_contracts * 100 * multiplier
+        total_cost += commission_rate * num_contracts
+    return total_cost
+
 def has_limited_loss(options, actions, contracts):
     """
     Check if a strategy has limited loss potential.
