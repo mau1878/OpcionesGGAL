@@ -174,10 +174,12 @@ def get_risk_free_rate():
         for plazo in [30, 31, 32, 33, 34, 35]:
             tasa = df_pesos[df_pesos['Plazo'] == plazo]['Tasa Tomadora']
             if not tasa.empty:
+                logger.info(f"Risk-free rate fetched: {tasa.iloc[0]} for plazo {plazo}")
                 return tasa.iloc[0]
         st.warning("No se encontró una Tasa Tomadora válida para Plazo 30-35 días en PESOS. Usando tasa predeterminada de 35%.")
         return 0.35
     except Exception as e:
+        logger.error(f"Error fetching risk-free rate: {e}")
         st.error(f"Error al obtener la Tasa Tomadora: {e}. Usando tasa predeterminada de 35%.")
         return 0.35
 
@@ -215,18 +217,27 @@ def calculate_option_price(option: Dict, spot_price: float, risk_free_rate: floa
         logger.debug(f"BlackScholesProcess inputs: spot={spot_price}, strike={strike}, risk_free={risk_free_rate}, volatility={volatility}, types: spot_handle={type(spot_handle).__name__}, dividend_ts={type(dividend_ts).__name__}, risk_free_ts={type(risk_free_ts).__name__}, volatility_ts={type(volatility_ts).__name__}")
 
         if not use_quantlib:
+            logger.info(f"Using intrinsic value for {option['symbol']} due to QuantLib bypass")
             st.warning(f"Using intrinsic value for {option['symbol']} due to QuantLib issue")
             if option['type'].lower() == 'call':
                 return max(spot_price - strike, 0)
             else:  # put
                 return max(strike - spot_price, 0)
 
-        process = ql.BlackScholesProcess(spot_handle, dividend_ts, risk_free_ts, volatility_ts)
-        option = ql.VanillaOption(payoff, exercise)
-        option.setPricingEngine(ql.AnalyticEuropeanEngine(process))
-        price = option.NPV()
-        logger.debug(f"Calculated price: {price}")
-        return price
+        try:
+            process = ql.BlackScholesProcess(spot_handle, dividend_ts, risk_free_ts, volatility_ts)
+            option = ql.VanillaOption(payoff, exercise)
+            option.setPricingEngine(ql.AnalyticEuropeanEngine(process))
+            price = option.NPV()
+            logger.debug(f"Calculated price: {price}")
+            return price
+        except Exception as e:
+            logger.error(f"QuantLib error for {option['symbol']}: {e}")
+            st.error(f"QuantLib error for {option['symbol']}: {e}. Falling back to intrinsic value.")
+            if option['type'].lower() == 'call':
+                return max(spot_price - strike, 0)
+            else:  # put
+                return max(strike - spot_price, 0)
     except Exception as e:
         logger.error(f"Error calculating price for symbol {option['symbol']}, strike {option['strike']}: {e}")
         st.warning(f"Error calculating price for symbol {option['symbol']}, strike {option['strike']}: {e}")
@@ -428,6 +439,7 @@ elif strategy_page == "Covered Call":
     
     # Calculate P&L
     with st.spinner("Calculando P&L para Covered Call..."):
+        logger.debug(f"Starting P&L calculation for Covered Call with strategy: {strategy}")
         pnl, total_cost = calculate_strategy_pnl(
             strategy, spot_range, time_points, st.session_state.num_contracts,
             st.session_state.commission_rate, st.session_state.risk_free_rate, st.session_state.iv, st.session_state.selected_exp, st.session_state.use_quantlib
@@ -471,7 +483,7 @@ elif strategy_page == "Covered Call":
         width=800,
         height=600
     )
-    logger.debug("Plotly figure configured successfully")
+    logger.debug("Plotly figure configured successfully for Covered Call")
     st.plotly_chart(fig, use_container_width=True)
     st.metric("Costo Total Estimado (ARS)", f"{total_cost:.2f}")
 
@@ -493,6 +505,7 @@ elif strategy_page == "Protective Put":
     
     # Calculate P&L
     with st.spinner("Calculando P&L para Protective Put..."):
+        logger.debug(f"Starting P&L calculation for Protective Put with strategy: {strategy}")
         pnl, total_cost = calculate_strategy_pnl(
             strategy, spot_range, time_points, st.session_state.num_contracts,
             st.session_state.commission_rate, st.session_state.risk_free_rate, st.session_state.iv, st.session_state.selected_exp, st.session_state.use_quantlib
@@ -536,7 +549,7 @@ elif strategy_page == "Protective Put":
         width=800,
         height=600
     )
-    logger.debug("Plotly figure configured successfully")
+    logger.debug("Plotly figure configured successfully for Protective Put")
     st.plotly_chart(fig, use_container_width=True)
     st.metric("Costo Total Estimado (ARS)", f"{total_cost:.2f}")
 
