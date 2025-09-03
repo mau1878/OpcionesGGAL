@@ -131,14 +131,13 @@ with tab1:
         st.session_state["straddle_df"] = edited_df.copy()
 
         # Sync visualize flags to DataFrame
-        
-        for idx in range(len(edited_df)):
+        for idx in edited_df.index:
             edited_df.at[idx, 'Visualize'] = st.session_state["visualize_flags_straddle"][idx]
 
         # Sort DataFrame
         if sort_by == "Breakeven Probability":
             edited_df['Breakeven Probability'] = edited_df.apply(
-                lambda row: norm.cdf((np.log(row['upper_breakeven'] / current_price) - risk_free_rate * expiration_days / 365.0) / 
+                lambda row: norm.cdf((np.log(row['upper_breakeven'] / current_price) - risk_free_rate * expiration_days / 365.0) /
                                      (st.session_state.iv * np.sqrt(expiration_days / 365.0))), axis=1
             )
             edited_df = edited_df.sort_values(by="Breakeven Probability", ascending=False)
@@ -159,7 +158,6 @@ with tab1:
             on_change=visualize_callback_straddle,
             width='stretch'
         )
-        # Update flags after edit
         # Update flags after edit
         for idx in edited_df.index:
             st.session_state["visualize_flags_straddle"][idx] = edited_df.at[idx, 'Visualize']
@@ -209,7 +207,7 @@ with tab2:
             edited = st.session_state.get("strangle_editor", {})
             edited_rows = edited.get('edited_rows', {})
             edited_df_local = st.session_state.get("strangle_df", edited_df)
-            
+
             for idx in edited_rows:
                 if isinstance(idx, int) and 0 <= idx < len(edited_df_local):
                     row = edited_df_local.iloc[idx]
@@ -245,13 +243,13 @@ with tab2:
         st.session_state["strangle_df"] = edited_df.copy()
 
         # Sync visualize flags to DataFrame
-        for idx in range(len(edited_df)):
+        for idx in edited_df.index:
             edited_df.at[idx, 'Visualize'] = st.session_state["visualize_flags_strangle"][idx]
 
         # Sort DataFrame
         if sort_by == "Breakeven Probability":
             edited_df['Breakeven Probability'] = edited_df.apply(
-                lambda row: norm.cdf((np.log(row['upper_breakeven'] / current_price) - risk_free_rate * expiration_days / 365.0) / 
+                lambda row: norm.cdf((np.log(row['upper_breakeven'] / current_price) - risk_free_rate * expiration_days / 365.0) /
                                      (st.session_state.iv * np.sqrt(expiration_days / 365.0))), axis=1
             )
             edited_df = edited_df.sort_values(by="Breakeven Probability", ascending=False)
@@ -272,7 +270,6 @@ with tab2:
             on_change=visualize_callback_strangle,
             width='stretch'
         )
-        # Update flags after edit
         # Update flags after edit
         for idx in edited_df.index:
             st.session_state["visualize_flags_strangle"][idx] = edited_df.at[idx, 'Visualize']
