@@ -1,6 +1,5 @@
 import streamlit as st
-from datetime import datetime, date
-from data_utils import fetch_cauciones_table, get_risk_free_rate  # Assuming fetch_cauciones_table is in data_utils
+from datetime import datetime, date  # Assuming fetch_cauciones_table is in data_utils
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
