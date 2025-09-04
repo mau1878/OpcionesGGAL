@@ -253,7 +253,7 @@ def create_bullish_spread_table(options, calc_func, num_contracts, commission_ra
         else:  # calculate_bull_put_spread
             short_opt, long_opt = (opt1, opt2) if opt1["strike"] > opt2["strike"] else (opt2, opt1)
         result = calc_func(long_opt, short_opt, num_contracts, commission_rate)
-        if result and isinstance(result, dict) and "lower_breakeven" in result:
+        if result and isinstance(result, dict) and "max_profit" in result and result["max_profit"] > 0:
             row = {
                 "Net Cost" if is_debit else "Net Credit": result["net_cost"] if is_debit else -result["net_cost"],
                 "Max Profit": result["max_profit"],
@@ -301,7 +301,7 @@ def create_bearish_spread_table(options, calc_func, num_contracts, commission_ra
         else:  # calculate_bear_put_spread
             long_opt, short_opt = (opt1, opt2) if opt1["strike"] > opt2["strike"] else (opt2, opt1)
         result = calc_func(short_opt, long_opt, num_contracts, commission_rate) if calc_func.__name__ == "calculate_bear_call_spread" else calc_func(long_opt, short_opt, num_contracts, commission_rate)
-        if result and isinstance(result, dict) and "lower_breakeven" in result:
+        if result and isinstance(result, dict) and "max_profit" in result and result["max_profit"] > 0:
             row = {
                 "Net Cost" if is_debit else "Net Credit": result["net_cost"] if is_debit else -result["net_cost"],
                 "Max Profit": result["max_profit"],

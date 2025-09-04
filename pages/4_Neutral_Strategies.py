@@ -96,6 +96,23 @@ with tab1:
         else:
             edited_df = edited_df.sort_values(by="Cost-to-Profit Ratio")
 
+        # Calculate Probability of Profit (PoP: prob outside breakevens)
+        T = expiration_days / 365.0
+        edited_df['Prob of Profit'] = edited_df.apply(
+            lambda row: (
+                    norm.cdf(  # Prob S_T < lower_breakeven
+                        (np.log(float(row['lower_breakeven']) / current_price) + (
+                                    -risk_free_rate + 0.5 * st.session_state.iv ** 2) * T) /
+                        (st.session_state.iv * np.sqrt(T))
+                    ) +
+                    (1 - norm.cdf(  # Prob S_T > upper_breakeven
+                        (np.log(current_price / float(row['upper_breakeven'])) + (
+                                    risk_free_rate - 0.5 * st.session_state.iv ** 2) * T) /
+                        (st.session_state.iv * np.sqrt(T))
+                    ))
+            ), axis=1
+        )
+        edited_df['Prob of Profit'] = edited_df['Prob of Profit'].apply(lambda x: f"{x * 100:.1f}%")
         # Store DataFrame in session state
         st.session_state["call_butterfly_df"] = edited_df.copy()
 
@@ -191,6 +208,23 @@ with tab2:
         else:
             edited_df = edited_df.sort_values(by="Cost-to-Profit Ratio")
 
+        # Calculate Probability of Profit (PoP: prob outside breakevens)
+        T = expiration_days / 365.0
+        edited_df['Prob of Profit'] = edited_df.apply(
+            lambda row: (
+                    norm.cdf(  # Prob S_T < lower_breakeven
+                        (np.log(float(row['lower_breakeven']) / current_price) + (
+                                    -risk_free_rate + 0.5 * st.session_state.iv ** 2) * T) /
+                        (st.session_state.iv * np.sqrt(T))
+                    ) +
+                    (1 - norm.cdf(  # Prob S_T > upper_breakeven
+                        (np.log(current_price / float(row['upper_breakeven'])) + (
+                                    risk_free_rate - 0.5 * st.session_state.iv ** 2) * T) /
+                        (st.session_state.iv * np.sqrt(T))
+                    ))
+            ), axis=1
+        )
+        edited_df['Prob of Profit'] = edited_df['Prob of Profit'].apply(lambda x: f"{x * 100:.1f}%")
         # Store DataFrame in session state
         st.session_state["put_butterfly_df"] = edited_df.copy()
 
@@ -286,6 +320,23 @@ with tab3:
         else:
             edited_df = edited_df.sort_values(by="Cost-to-Profit Ratio")
 
+        # Calculate Probability of Profit (PoP: prob outside breakevens)
+        T = expiration_days / 365.0
+        edited_df['Prob of Profit'] = edited_df.apply(
+            lambda row: (
+                    norm.cdf(  # Prob S_T < lower_breakeven
+                        (np.log(float(row['lower_breakeven']) / current_price) + (
+                                    -risk_free_rate + 0.5 * st.session_state.iv ** 2) * T) /
+                        (st.session_state.iv * np.sqrt(T))
+                    ) +
+                    (1 - norm.cdf(  # Prob S_T > upper_breakeven
+                        (np.log(current_price / float(row['upper_breakeven'])) + (
+                                    risk_free_rate - 0.5 * st.session_state.iv ** 2) * T) /
+                        (st.session_state.iv * np.sqrt(T))
+                    ))
+            ), axis=1
+        )
+        edited_df['Prob of Profit'] = edited_df['Prob of Profit'].apply(lambda x: f"{x * 100:.1f}%")
         # Store DataFrame in session state
         st.session_state["call_condor_df"] = edited_df.copy()
 
@@ -382,6 +433,23 @@ with tab4:
         else:
             edited_df = edited_df.sort_values(by="Cost-to-Profit Ratio")
 
+        # Calculate Probability of Profit (PoP: prob outside breakevens)
+        T = expiration_days / 365.0
+        edited_df['Prob of Profit'] = edited_df.apply(
+            lambda row: (
+                    norm.cdf(  # Prob S_T < lower_breakeven
+                        (np.log(float(row['lower_breakeven']) / current_price) + (
+                                    -risk_free_rate + 0.5 * st.session_state.iv ** 2) * T) /
+                        (st.session_state.iv * np.sqrt(T))
+                    ) +
+                    (1 - norm.cdf(  # Prob S_T > upper_breakeven
+                        (np.log(current_price / float(row['upper_breakeven'])) + (
+                                    risk_free_rate - 0.5 * st.session_state.iv ** 2) * T) /
+                        (st.session_state.iv * np.sqrt(T))
+                    ))
+            ), axis=1
+        )
+        edited_df['Prob of Profit'] = edited_df['Prob of Profit'].apply(lambda x: f"{x * 100:.1f}%")
         # Store DataFrame in session state
         st.session_state["put_condor_df"] = edited_df.copy()
 

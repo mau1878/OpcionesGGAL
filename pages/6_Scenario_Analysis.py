@@ -127,6 +127,29 @@ if st.button("Analizar Estrategia"):
         "contract_ratios": contracts
     })
 
+    # Add Breakeven Probability to summary (if applicable)
+    T = expiration_days / 365.0
+    if "lower_breakeven" in result and "upper_breakeven" in result:
+        prob_profit = (
+                norm.cdf(  # Prob < lower
+                    (np.log(result['lower_breakeven'] / current_price) + (-risk_free_rate + 0.5 * iv ** 2) * T) /
+                    (iv * np.sqrt(T))
+                ) +
+                (1 - norm.cdf(  # Prob > upper
+                    (np.log(current_price / result['upper_breakeven']) + (risk_free_rate - 0.5 * iv ** 2) * T) /
+                    (iv * np.sqrt(T))
+                ))
+        )
+        st.metric("Probability of Profit", f"{prob_profit * 100:.1f}%")
+    else:
+        # Single breakeven (adjust direction as needed)
+        breakeven = result.get('breakeven', result.get('upper_breakeven', result.get('lower_breakeven')))
+        if breakeven:
+            prob = norm.cdf(
+                (np.log(current_price / breakeven) + (risk_free_rate - 0.5 * iv ** 2) * T) /
+                (iv * np.sqrt(T))
+            )
+            st.metric("Breakeven Probability (> BE)", f"{prob * 100:.1f}%")
     # Visualize
     key = f"Custom Strategy {'/'.join(str(s) for s in result['strikes'])}"
     try:

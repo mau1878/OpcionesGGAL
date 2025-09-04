@@ -31,14 +31,18 @@ st.write(
     "Encuentra la estrategia de opciones que maximiza la probabilidad de estar por encima del nivel de breakeven al vencimiento, con pérdida limitada.")
 
 # Sidebar inputs for optimization constraints
+# Sidebar inputs for optimization constraints
 st.sidebar.header("Parámetros de Optimización")
 max_options = st.sidebar.number_input("Número máximo de opciones en la estrategia", min_value=1, max_value=4, value=2,
-                                      step=1)
+                                     step=1)
 max_contracts_per_option = st.sidebar.number_input("Contratos máximos por opción", min_value=1, max_value=5, value=3,
-                                                   step=1)
+                                                  step=1)
 min_probability = st.sidebar.slider("Probabilidad mínima aceptable (%)", 0.0, 100.0, 50.0) / 100
 limit_loss = st.sidebar.checkbox("Evitar pérdidas ilimitadas", value=True)
 max_strategies = st.sidebar.number_input("Max Strategies to Evaluate", min_value=100, max_value=5000, value=500)
+
+# Add Execute button
+execute_button = st.sidebar.button("Execute Optimization")
 
 # Initialize session state for results
 if "optimal_strategy" not in st.session_state:
@@ -142,66 +146,95 @@ def estimate_breakeven_probability(current_price, breakeven, expiration_days, iv
 
 
 # Optimization loop
-all_options = calls + puts
-nearest_options = sorted(all_options, key=lambda o: abs(o["strike"] - current_price))[:15]  # Limit for performance
-optimal_prob = 0.0
-optimal_strategy = None
-count = 0
+# Optimization loop, only runs if button is clicked
+if execute_button:
+    all_options = calls + puts
+    nearest_options = sorted(all_options, key=lambda o: abs(o["strike"] - current_price))[:15]  # Limit for performance
+    optimal_prob = 0.0
+    optimal_strategy = None
+    count = 0
+    total_combinations = min(max_strategies, sum(len(list(product(nearest_options, repeat=num_opts))) *
+                                                len(list(product(["buy", "sell"], repeat=num_opts))) *
+                                                len(list(product(range(1, max_contracts_per_option + 1), repeat=num_opts)))
+                                                for num_opts in range(1, max_options + 1)))
 
-for num_opts in range(1, max_options + 1):
-    for combo in product(nearest_options, repeat=num_opts):
-        if count >= max_strategies:
-            break
-        count += 1
-        # Generate possible actions and contracts
-        for action_combo in product(["buy", "sell"], repeat=num_opts):
-            for contract_combo in product(range(1, max_contracts_per_option + 1), repeat=num_opts):
-                options = list(combo)
-                actions = list(action_combo)
-                contracts = list(contract_combo)
-                if limit_loss and not has_limited_loss(options, actions, contracts):
-                    continue
-                metrics = calculate_strategy_metrics(options, actions, contracts, current_price, expiration_days,
-                                                     st.session_state.iv)
-                if metrics["probability"] > min_probability and metrics["probability"] > optimal_prob:
-                    optimal_prob = metrics["probability"]
-                    optimal_strategy = {
-                        "options": options,
-                        "actions": actions,
-                        "contracts": contracts,
-                        "result": metrics
-                    }
+    # Initialize Streamlit progress bar and status text
+    st.subheader("Optimization Progress")
+    progress_bar = st.progress(0)
+    status_text = st.empty()
 
-if optimal_strategy:
-    st.session_state["optimal_strategy"] = optimal_strategy
-    st.write("Estrategia Óptima Encontrada")
-    options, actions, contracts, result = optimal_strategy["options"], optimal_strategy["actions"], optimal_strategy[
-        "contracts"], optimal_strategy["result"]
+    for num_opts in range(1, max_options + 1):
+        for combo in product(nearest_options, repeat=num_opts):
+            if count >= max_strategies:
+                break
+            for action_combo in product(["buy", "sell"], repeat=num_opts):
+                for contract_combo in product(range(1, max_contracts_per_option + 1), repeat=num_opts):
+                    if count >= max_strategies:
+                        break
+                    count += 1
+                    # Update progress bar and status text
+                    progress = min(count / total_combinations, 1.0)
+                    progress_bar.progress(progress)
+                    status_text.text(f"Processed {count} of {total_combinations} strategies ({progress*100:.1f}%)")
 
-    # Determine strategy type and visualize
-    is_bullish = all(a == "buy" for a in actions[:2]) and len(set(o["strike"] for o in options)) == 2
-    is_bearish = all(a == "sell" for a in actions[:2]) and len(set(o["strike"] for o in options)) == 2
-    is_volatility = len(options) == 2 and options[0]["strike"] == options[1]["strike"] and actions[0] != actions[1]
+                    # Log to server console
+                    if count % 100 == 0:  # Log every 100 strategies
+                        logger.info(f"Processed {count} strategies")
+                        print(f"Processed {count} strategies")
 
-    if is_bullish and len(options) == 2:
-        visualize_bullish_3d(result, current_price, expiration_days, result["iv"], "Optimal Bullish Strategy", options,
-                             actions)
-    elif is_bearish and len(options) == 2:
-        visualize_bearish_3d(result, current_price, expiration_days, result["iv"], "Optimal Bearish Strategy", options,
-                             actions)
-    elif is_volatility and len(options) == 2:
-        visualize_volatility_3d(result, current_price, expiration_days, result["iv"], "Optimal Volatility Strategy",
-                                options, actions)
+                    options = list(combo)
+                    actions = list(action_combo)
+                    contracts = list(contract_combo)
+                    if limit_loss and not has_limited_loss(options, actions, contracts):
+                        continue
+                    metrics = calculate_strategy_metrics(options, actions, contracts, current_price, expiration_days,
+                                                        st.session_state.iv)
+                    if metrics["probability"] > min_probability and metrics["probability"] > optimal_prob:
+                        optimal_prob = metrics["probability"]
+                        optimal_strategy = {
+                            "options": options,
+                            "actions": actions,
+                            "contracts": contracts,
+                            "result": metrics
+                        }
+
+    # Clear progress bar and status text after completion
+    progress_bar.progress(1.0)
+    status_text.text(f"Completed processing {count} strategies")
+
+    # Log completion
+    logger.info(f"Optimization complete. Processed {count} strategies. Optimal probability: {optimal_prob}")
+    print(f"Optimization complete. Processed {count} strategies. Optimal probability: {optimal_prob}")
+
+    if optimal_strategy:
+        st.session_state["optimal_strategy"] = optimal_strategy
+        st.write("Estrategia Óptima Encontrada")
+        options, actions, contracts, result = optimal_strategy["options"], optimal_strategy["actions"], optimal_strategy[
+            "contracts"], optimal_strategy["result"]
+
+        # Determine strategy type and visualize
+        is_bullish = all(a == "buy" for a in actions[:2]) and len(set(o["strike"] for o in options)) == 2
+        is_bearish = all(a == "sell" for a in actions[:2]) and len(set(o["strike"] for o in options)) == 2
+        is_volatility = len(options) == 2 and options[0]["strike"] == options[1]["strike"] and actions[0] != actions[1]
+
+        if is_bullish and len(options) == 2:
+            visualize_bullish_3d(result, current_price, expiration_days, result["iv"], "Optimal Bullish Strategy", options,
+                                 actions)
+        elif is_bearish and len(options) == 2:
+            visualize_bearish_3d(result, current_price, expiration_days, result["iv"], "Optimal Bearish Strategy", options,
+                                 actions)
+        elif is_volatility and len(options) == 2:
+            visualize_volatility_3d(result, current_price, expiration_days, result["iv"], "Optimal Volatility Strategy",
+                                    options, actions)
+        else:
+            visualize_neutral_3d(result, current_price, expiration_days, result["iv"], "Optimal Neutral Strategy", options,
+                                 actions)
     else:
-        visualize_neutral_3d(result, current_price, expiration_days, result["iv"], "Optimal Neutral Strategy", options,
-                             actions)
-else:
-    st.warning("No optimal strategy found.")
+        st.warning("No optimal strategy found.")
 
-# Add IV failure warnings
-if st.session_state["iv_failure_count"] > 10:
-    st.error("Multiple IV calibration failures detected. Check option prices or market data.")
+    # Add IV failure warnings
+    if st.session_state["iv_failure_count"] > 10:
+        st.error("Multiple IV calibration failures detected. Check option prices or market data.")
 
-# Add debug logging
-logger.debug(f"Processed {count} strategies. Optimal probability: {optimal_prob}")
-logger.debug(f"Optimal strategy: {optimal_strategy}")
+# Add debug logging (outside the button to log initialization)
+logger.debug(f"Page loaded. Waiting for user to click 'Execute Optimization'.")

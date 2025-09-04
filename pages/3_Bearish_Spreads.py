@@ -72,6 +72,16 @@ with tab1:
                 edited_df['Strikes'] = edited_df.index.astype(str)
             edited_df = edited_df.reset_index(drop=True)
 
+        # Calculate Breakeven Probability (prob of S_T < breakeven for bearish)
+        T = expiration_days / 365.0
+        edited_df['Breakeven Probability'] = edited_df.apply(
+            lambda row: norm.cdf(
+                (np.log(float(row['Breakeven']) / current_price) + (
+                            -risk_free_rate + 0.5 * st.session_state.iv ** 2) * T) /
+                (st.session_state.iv * np.sqrt(T))
+            ), axis=1  # Note: Flipped for prob < breakeven
+        )
+        edited_df['Breakeven Probability'] = edited_df['Breakeven Probability'].apply(lambda x: f"{x * 100:.1f}%")
         # Sort DataFrame
         if "Breakeven Probability" in st.session_state and st.session_state.get("sort_by") == "Breakeven Probability":
             edited_df['Breakeven Probability'] = edited_df.apply(
@@ -191,6 +201,16 @@ with tab2:
                 edited_df['Strikes'] = edited_df.index.astype(str)
             edited_df = edited_df.reset_index(drop=True)
 
+        # Calculate Breakeven Probability (prob of S_T < breakeven for bearish)
+        T = expiration_days / 365.0
+        edited_df['Breakeven Probability'] = edited_df.apply(
+            lambda row: norm.cdf(
+                (np.log(float(row['Breakeven']) / current_price) + (
+                            -risk_free_rate + 0.5 * st.session_state.iv ** 2) * T) /
+                (st.session_state.iv * np.sqrt(T))
+            ), axis=1  # Note: Flipped for prob < breakeven
+        )
+        edited_df['Breakeven Probability'] = edited_df['Breakeven Probability'].apply(lambda x: f"{x * 100:.1f}%")
         # Sort DataFrame
         if "Breakeven Probability" in st.session_state and st.session_state.get("sort_by") == "Breakeven Probability":
             edited_df['Breakeven Probability'] = edited_df.apply(
